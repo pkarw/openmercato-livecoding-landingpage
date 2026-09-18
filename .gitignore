@@ -9,6 +9,10 @@ node_modules
 client/dist
 .npm
 
+# Agent pipeline scratch — session transcripts and throwaway worktrees hold secrets
+.ai/tmp/
+.ai/cezar/
+
 # Secrets and local overrides — only .env.example is committed
 .env
 .env.local

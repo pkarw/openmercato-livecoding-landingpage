@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "baseBranch": "main",
+  "tracker": "github",
+  "validation": {
+    "commands": [
+      "npm --prefix client run typecheck",
+      "npm --prefix client run build",
+      "bash scripts/dotnet.sh build server --no-restore"
+    ]
+  },
+  "labels": {
+    "enabled": true,
+    "pipeline": [],
+    "category": [
+      "bug",
+      "security"
+    ],
+    "meta": [],
+    "priority": [
+      "priority-low",
+      "priority-medium",
+      "priority-high",
+      "priority-extreme"
+    ],
+    "risk": [
+      "risk-low",
+      "risk-medium",
+      "risk-high"
+    ]
+  },
+  "qaGate": true,
+  "ci": {
+    "maxWaitMinutes": 40
+  },
+  "paths": {
+    "runs": ".ai/runs",
+    "analysis": ".ai/analysis",
+    "specs": ".ai/specs",
+    "scripts": ".ai/scripts",
+    "qa": ".ai/qa"
+  },
+  "reviewChecklist": null,
+  "closeKeywords": []
+}
