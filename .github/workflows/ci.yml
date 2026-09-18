@@ -17,6 +17,7 @@ jobs:
   client:
     name: Client (typecheck + build)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +36,7 @@ jobs:
   server:
     name: Server (build + tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     # The repository tests run against a real PostgreSQL: the fixture creates a throwaway
     # database per run, applies db/migrations, and drops it again.
