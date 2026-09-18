@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch supersedes the run in flight.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  client:
+    name: Client (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm --prefix client ci
+
+      - run: npm --prefix client run typecheck
+
+      - run: npm --prefix client run build
+
+  server:
+    name: Server (build + tests)
+    runs-on: ubuntu-latest
+
+    # The repository tests run against a real PostgreSQL: the fixture creates a throwaway
+    # database per run, applies db/migrations, and drops it again.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      LANDING_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: |
+          bash scripts/dotnet.sh restore server
+          bash scripts/dotnet.sh restore tests/Landing.Tests
+
+      - name: Build server
+        run: bash scripts/dotnet.sh build server --no-restore
+
+      - name: Test
+        run: bash scripts/dotnet.sh test tests/Landing.Tests --no-restore
