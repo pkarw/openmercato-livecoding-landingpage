@@ -86,7 +86,8 @@ without them, and refuses anything sent after the deadline with `410 Gone`.
 
 ## Environment
 
-Defaults ship in `.env`; machine-specific overrides belong in `.env.local` (git-ignored).
+Copy `.env.example` to `.env` and fill in the secrets; machine-specific overrides belong in `.env.local`.
+Both `.env` and `.env.local` are git-ignored — never commit a real `RESEND_API_KEY`.
 
 | Variable | Purpose |
 | --- | --- |

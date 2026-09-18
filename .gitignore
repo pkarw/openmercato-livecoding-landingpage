@@ -9,9 +9,11 @@ node_modules
 client/dist
 .npm
 
-# Local overrides and noise
+# Secrets and local overrides — only .env.example is committed
+.env
 .env.local
-.env.*.local
+.env.*
+!.env.example
 *.log
 .pm2
 .DS_Store
