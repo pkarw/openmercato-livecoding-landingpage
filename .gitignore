@@ -1,12 +1,18 @@
+# .NET
+bin/
+obj/
+.publish/
+server/wwwroot/
+
+# Node
 node_modules
-.next
-out
-build
+client/dist
 .npm
-.pm2
-*.log
+
+# Local overrides and noise
 .env.local
 .env.*.local
-next-env.d.ts
+*.log
+.pm2
 .DS_Store
-tsconfig.tsbuildinfo
+*.tsbuildinfo

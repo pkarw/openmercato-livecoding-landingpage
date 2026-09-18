@@ -1,0 +1,120 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Palette lifted from openmercatocloud.com so the landing page sits in the same design system. */
+:root {
+  --radius: 0.75rem;
+  --background: #ffffff;
+  --foreground: #1a1919;
+  --card: #ffffff;
+  --card-foreground: #1a1919;
+  --popover: #ffffff;
+  --popover-foreground: #1a1919;
+  --primary: #e5f520;
+  --primary-foreground: #1a1919;
+  --secondary: #f4f2f0;
+  --secondary-foreground: #1a1919;
+  --muted: #f4f2f0;
+  --muted-foreground: #5c5854;
+  --accent: #f4f2f0;
+  --accent-foreground: #1a1919;
+  --destructive: #fc4447;
+  --destructive-foreground: #ffffff;
+  --border: #ded9d4;
+  --input: #ded9d4;
+  --ring: #171717;
+
+  --sand: #211e1c;
+  --sand-cream: #edf5cd;
+  --sand-soft: #948d85;
+  --success: #34d399;
+  --brave: #fc4447;
+  --font-hand: 'Caveat', cursive;
+}
+
+.dark {
+  --background: #141313;
+  --foreground: #ffffff;
+  --card: #1a1919;
+  --card-foreground: #ffffff;
+  --popover: #1a1919;
+  --popover-foreground: #ffffff;
+  --primary: #e5f520;
+  --primary-foreground: #1a1919;
+  --secondary: #262525;
+  --secondary-foreground: #ffffff;
+  --muted: #262525;
+  --muted-foreground: #a3a09c;
+  --accent: #262525;
+  --accent-foreground: #ffffff;
+  --destructive: #fc4447;
+  --destructive-foreground: #ffffff;
+  --border: #262525;
+  --input: #2f2e2e;
+  --ring: #e5f520;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sand: var(--sand);
+  --color-sand-cream: var(--sand-cream);
+  --color-sand-soft: var(--sand-soft);
+  --color-success: var(--success);
+  --color-brave: var(--brave);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-hand: var(--font-hand);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+}
+
+@utility hand-note {
+  font-family: var(--font-hand);
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+/* The soft lime glow behind the hero, same trick the marketing site uses. */
+@utility glow-grid {
+  background-image:
+    radial-gradient(60rem 30rem at 50% -10%, color-mix(in oklab, var(--primary) 12%, transparent), transparent 70%),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 4%, transparent) 1px, transparent 1px);
+  background-size: 100% 100%, 4rem 4rem, 4rem 4rem;
+}

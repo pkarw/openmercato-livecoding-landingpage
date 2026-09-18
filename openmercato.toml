@@ -1,10 +1,9 @@
 version = 2
 
 prepare = [
-  ["npm", "install", "--no-audit", "--no-fund"],
-  ["npm", "run", "db:setup"],
-  ["npm", "run", "build"],
+  ["bash", "scripts/build.sh"],
+  ["bash", "scripts/serve.sh", "db", "migrate"],
 ]
 
 [preview]
-command = ["npm", "run", "start"]
+command = ["bash", "scripts/serve.sh"]
