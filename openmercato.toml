@@ -1,0 +1,10 @@
+version = 2
+
+prepare = [
+  ["npm", "install", "--no-audit", "--no-fund"],
+  ["npm", "run", "db:setup"],
+  ["npm", "run", "build"],
+]
+
+[preview]
+command = ["npm", "run", "start"]

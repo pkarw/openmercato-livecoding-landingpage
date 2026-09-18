@@ -1,0 +1,27 @@
+{
+  "name": "open-mercato-custom-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "NODE_ENV=production next build",
+    "start": "NODE_ENV=production next start -H 0.0.0.0 -p 3000",
+    "db:migrate": "node scripts/db.mjs migrate",
+    "db:seed": "node scripts/db.mjs seed",
+    "db:setup": "node scripts/db.mjs migrate && node scripts/db.mjs seed"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1",
+    "next": "^16.3.5",
+    "pg": "^8.13.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.7.2"
+  }
+}
