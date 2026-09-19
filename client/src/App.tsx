@@ -136,7 +136,7 @@ export default function App() {
             <div className="lg:sticky lg:top-24 lg:self-start">
               <div className="rounded-2xl border border-border bg-card p-6 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.9)] sm:p-8">
                 {claimed ? (
-                  <ClaimedCard result={claimed} />
+                  <ClaimedCard result={claimed} liveDiscountPercent={offer.discountPercent} />
                 ) : live ? (
                   <div className="space-y-6">
                     <div className="space-y-2">
