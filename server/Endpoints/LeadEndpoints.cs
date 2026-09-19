@@ -80,18 +80,14 @@ public static class LeadEndpoints
             await notifier.NotifyAsync(lead, alreadyClaimed, ct);
             logger.LogInformation("Lead {Status} for {Interest}", alreadyClaimed ? "returning" : "captured", lead.Interest);
 
-            // The code itself stays server-side — it is emailed out separately, closer to launch.
-            var payload = new
+            // Anonymous callers receive only campaign-wide acknowledgement data. Returning a
+            // stored lead, a repeat-only flag, or a record URL would let anyone probe whether an
+            // address is already registered and recover that person's saved details.
+            return Results.Ok(new
             {
-                lead = new { lead.Email, lead.Name, lead.Interest, lead.CreatedAt },
                 discountPercent = offer.DiscountPercent,
                 endsAt = offer.EndsAt,
-                alreadyClaimed,
-            };
-
-            return alreadyClaimed
-                ? Results.Ok(payload)
-                : Results.Created($"/api/leads/{lead.Id}", payload);
+            });
         }).WithTags("Offer");
 
         return routes;

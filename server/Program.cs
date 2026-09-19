@@ -87,3 +87,6 @@ static string MigrationsDirectory(string root)
     var source = Path.Combine(root, "db", "migrations");
     return Directory.Exists(source) ? source : Path.Combine(AppContext.BaseDirectory, "db", "migrations");
 }
+
+// WebApplicationFactory uses this public marker to host the real HTTP pipeline in integration tests.
+public partial class Program { }

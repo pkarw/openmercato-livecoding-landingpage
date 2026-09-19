@@ -18,16 +18,8 @@ export type ClaimRequest = {
 }
 
 export type ClaimResponse = {
-  /** The discount code stays server-side — it is emailed out separately. */
-  lead: {
-    email: string
-    name: string | null
-    interest: Interest
-    createdAt: string
-  }
   discountPercent: number
   endsAt: string
-  alreadyClaimed: boolean
 }
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
