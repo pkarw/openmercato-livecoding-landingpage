@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Xunit;
 
 namespace Landing.Tests;
 
@@ -41,16 +42,23 @@ public sealed class LeadEndpointPrivacyTests(PostgresWebApplicationFixture appli
         using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
         using var repeatJson = JsonDocument.Parse(await repeat.Content.ReadAsStringAsync());
 
-        Assert.Equal(firstJson.RootElement.GetRawText(), repeatJson.RootElement.GetRawText());
-        Assert.Equal(
-            ["discountPercent", "endsAt"],
-            firstJson.RootElement.EnumerateObject().Select(property => property.Name).Order().ToArray());
+        var expectedProperties = new[] { "alreadyClaimed", "discountPercent", "endsAt", "lead" };
+        Assert.Equal(expectedProperties, PropertyNames(firstJson.RootElement));
+        Assert.Equal(expectedProperties, PropertyNames(repeatJson.RootElement));
+        Assert.False(firstJson.RootElement.GetProperty("alreadyClaimed").GetBoolean());
+        Assert.False(repeatJson.RootElement.GetProperty("alreadyClaimed").GetBoolean());
 
-        var publicBody = firstJson.RootElement.GetRawText();
-        Assert.DoesNotContain(email, publicBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Stored Private Name", publicBody, StringComparison.Ordinal);
-        Assert.DoesNotContain("openmercato", publicBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("alreadyClaimed", publicBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("lead", publicBody, StringComparison.OrdinalIgnoreCase);
+        var repeatLead = repeatJson.RootElement.GetProperty("lead");
+        Assert.Equal(email, repeatLead.GetProperty("email").GetString());
+        Assert.Equal("Attacker Supplied Name", repeatLead.GetProperty("name").GetString());
+        Assert.Equal("aitechleaders", repeatLead.GetProperty("interest").GetString());
+        Assert.True(DateTimeOffset.TryParse(repeatLead.GetProperty("createdAt").GetString(), out _));
+
+        var repeatBody = repeatJson.RootElement.GetRawText();
+        Assert.DoesNotContain("Stored Private Name", repeatBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("openmercato", repeatBody, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string[] PropertyNames(JsonElement element) =>
+        element.EnumerateObject().Select(property => property.Name).Order().ToArray();
 }

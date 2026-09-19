@@ -80,13 +80,21 @@ public static class LeadEndpoints
             await notifier.NotifyAsync(lead, alreadyClaimed, ct);
             logger.LogInformation("Lead {Status} for {Interest}", alreadyClaimed ? "returning" : "captured", lead.Interest);
 
-            // Anonymous callers receive only campaign-wide acknowledgement data. Returning a
-            // stored lead, a repeat-only flag, or a record URL would let anyone probe whether an
-            // address is already registered and recover that person's saved details.
+            // Keep the legacy fields as a compatibility bridge, but populate them only from this
+            // request. Returning persisted values or the real duplicate state would let anyone
+            // probe whether an address is registered and recover that person's saved details.
             return Results.Ok(new
             {
+                lead = new
+                {
+                    Email = email,
+                    Name = name,
+                    Interest = request.Interest!,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
                 discountPercent = offer.DiscountPercent,
                 endsAt = offer.EndsAt,
+                alreadyClaimed = false,
             });
         }).WithTags("Offer");
 

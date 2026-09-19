@@ -4,6 +4,7 @@ using Landing.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Xunit;
 
 namespace Landing.Tests;
 
@@ -53,6 +54,8 @@ public sealed class PostgresWebApplicationFixture : IAsyncLifetime
         SetEnvironment("DATABASE_URL", testConnectionString);
         SetEnvironment("REDIS_URL", string.Empty);
         SetEnvironment("RESEND_API_KEY", string.Empty);
+        SetEnvironment("ADMIN_EMAIL", "sender@example.invalid");
+        SetEnvironment("LEADS_INBOX", "inbox@example.invalid");
         SetEnvironment("OFFER_DISCOUNT_PERCENT", "10");
         SetEnvironment("OFFER_ENDS_AT", "2099-09-20T23:59:59+02:00");
 

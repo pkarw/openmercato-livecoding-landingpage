@@ -18,8 +18,17 @@ export type ClaimRequest = {
 }
 
 export type ClaimResponse = {
+  /** @deprecated Echoes the current request only; do not use it to infer saved lead state. */
+  lead: {
+    email: string
+    name: string | null
+    interest: Interest
+    createdAt: string
+  }
   discountPercent: number
   endsAt: string
+  /** @deprecated Always false so anonymous callers cannot probe whether an address exists. */
+  alreadyClaimed: boolean
 }
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
