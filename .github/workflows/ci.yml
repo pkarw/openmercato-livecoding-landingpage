@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same branch supersedes the run in flight.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -25,13 +26,17 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
       - run: npm --prefix client ci
+
       - run: npm --prefix client run typecheck
+
       - run: npm --prefix client run build
 
   server:
     name: Server (build + tests)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The repository tests run against a real PostgreSQL: the fixture creates a throwaway
+    # database per run, applies db/migrations, and drops it again.
     services:
       postgres:
         image: postgres:17
@@ -46,8 +51,10 @@ jobs:
           --health-retries 10
     env:
       LANDING_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'

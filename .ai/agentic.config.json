@@ -4,6 +4,7 @@
   "tracker": "github",
   "validation": {
     "commands": [
+      "npm --prefix client test",
       "npm --prefix client run typecheck",
       "npm --prefix client run build",
       "bash scripts/dotnet.sh build server --no-restore"

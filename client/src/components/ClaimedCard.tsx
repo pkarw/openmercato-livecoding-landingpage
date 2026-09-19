@@ -4,11 +4,7 @@ import type { ClaimResponse } from '@/lib/api'
 import { PRODUCTS } from '@/lib/offers'
 
 export function ClaimedCard({ result }: { result: ClaimResponse }) {
-  const { lead, discountPercent, alreadyClaimed } = result
-
-  const products = PRODUCTS.filter(
-    (product) => lead.interest === 'both' || lead.interest === product.key,
-  )
+  const { discountPercent } = result
 
   const steps = [
     'We email your personal discount code before the offer window closes.',
@@ -22,14 +18,10 @@ export function ClaimedCard({ result }: { result: ClaimResponse }) {
         <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/15 text-primary">
           <MailCheck className="size-6" />
         </span>
-        <h3 className="text-2xl font-bold tracking-tight">
-          {alreadyClaimed ? 'You are already on the list' : `Your ${discountPercent}% is reserved`}
-        </h3>
+        <h3 className="text-2xl font-bold tracking-tight">Check your inbox</h3>
         <p className="text-sm text-muted-foreground">
-          {alreadyClaimed
-            ? 'This address signed up earlier — the discount still waits for you under '
-            : 'We saved your choice and confirmed it at '}
-          <span className="font-medium text-foreground">{lead.email}</span>.
+          If the address is eligible, we will send the {discountPercent}% discount details by
+          email.
         </p>
       </div>
 
@@ -46,7 +38,7 @@ export function ClaimedCard({ result }: { result: ClaimResponse }) {
 
       <div className="space-y-3 text-left">
         <p className="text-sm font-medium">Have a look around in the meantime:</p>
-        {products.map((product) => (
+        {PRODUCTS.map((product) => (
           <a
             key={product.key}
             href={product.url}
