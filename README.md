@@ -84,6 +84,32 @@ bash scripts/serve.sh db new add_utm      # scaffold db/migrations/<timestamp>_a
 `interest` is `openmercato`, `aitechleaders` or `both`. Both consents are mandatory — the API rejects a claim
 without them, and refuses anything sent after the deadline with `410 Gone`.
 
+The endpoint is anonymous, so an address is never treated as proof of owning it: **a repeat claim returns the
+existing reservation and changes nothing** — not the stored interest, not the consents, not the name. Changing a
+stored preference needs an ownership proof this endpoint does not have.
+
+## Tests
+
+`tests/Landing.Tests` runs against a real PostgreSQL. The fixture creates a throwaway `landing_test_<guid>`
+database, applies `db/migrations/*.sql` through the app's own migration runner, and drops it afterwards.
+
+```bash
+export LANDING_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres
+bash scripts/dotnet.sh test tests/Landing.Tests
+```
+
+`LANDING_TEST_DATABASE_URL` is deliberately separate from `DATABASE_URL`: the tests never fall back to the
+application's database, and must never be pointed at production.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+
+| Job | What it runs |
+| --- | --- |
+| Client | `npm --prefix client ci`, `run typecheck`, `run build` |
+| Server | `scripts/dotnet.sh build server`, then `scripts/dotnet.sh test tests/Landing.Tests` against a `postgres:17` service container |
+
 ## Environment
 
 Copy `.env.example` to `.env` and fill in the secrets; machine-specific overrides belong in `.env.local`.
@@ -101,6 +127,17 @@ Both `.env` and `.env.local` are git-ignored — never commit a real `RESEND_API
 | `ADMIN_EMAIL` | From-address, must be on a domain verified in Resend |
 | `LEADS_INBOX` | Where lead notifications land (default `info@openmercato.com`) |
 
+### Credential safety
+
+CI runs Gitleaks against the checked-out tree and proves the detector with a generated fake-secret fixture. To run the same checks locally, install Gitleaks and use:
+
+```bash
+scripts/test-secret-scan.sh
+scripts/check-secrets.sh
+```
+
+If a real credential reaches Git, removing the file is not enough. Revoke or rotate the credential with its service owner, update deployment secret storage, and review repository access and history privately. Coordinate any history rewrite with every clone owner; the current-tree scan deliberately does not claim that existing history is clean.
+
 ## Layout
 
 ```
@@ -111,10 +148,23 @@ server/            ASP.NET Core app — minimal APIs, static hosting, SPA fallba
   Data/            Dapper repository, migration runner, db CLI verbs
   Notifications/   Resend client and the two lead emails
 db/migrations/     SQL migrations, applied in filename order
-scripts/           dotnet.sh (SDK bootstrap), build.sh, serve.sh
+scripts/           dotnet.sh (SDK bootstrap), postgres.sh (db guard, + postgres.test.sh), build.sh, serve.sh
 ```
 
 ## Sandbox
 
 `openmercato.toml` builds the client, publishes the server, applies migrations, and previews
 `scripts/serve.sh` on `0.0.0.0:3000`. Apply changes with `workspace-agent-cli start`.
+
+The sandbox is snapshotted and resumed rather than shut down, so PostgreSQL can come back with a
+`postmaster.pid` naming a PID that has since been recycled by another process. PostgreSQL then
+refuses to start (`lock file "postmaster.pid" already exists`), PM2 exhausts its restart budget, and
+every request fails on `Failed to connect to 127.0.0.1:5432`. `scripts/serve.sh` runs
+`scripts/postgres.sh` first, which clears provably stale lock files and restarts the service. It is a
+no-op when the database is already up, and anywhere there is nothing to recover — no writable
+`$PGDATA` and no pm2 service — so a clone pointing `DATABASE_URL` at Docker or a managed instance is
+never delayed by it. A postmaster that is listening only on its unix socket counts as up and is left
+alone. The durable fix belongs in the image's root-owned `/usr/local/bin/workspace-postgres`.
+
+Run `bash scripts/postgres.test.sh` after touching the guard: it covers the connection-string forms
+the app accepts, `.env` precedence, and that neither branch waits or deletes anything it should not.
