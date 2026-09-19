@@ -7,7 +7,8 @@ namespace Landing.Data;
 public sealed class LeadRepository(NpgsqlDataSource dataSource)
 {
     private const string Columns =
-        "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, created_at as CreatedAt";
+        "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, " +
+        "discount_percent as DiscountPercent, created_at as CreatedAt";
 
     public async Task<Lead?> FindByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
@@ -26,6 +27,7 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
         string? name,
         string interest,
         string discountCode,
+        int discountPercent,
         bool marketingConsent,
         string? source,
         CancellationToken cancellationToken = default)
@@ -34,12 +36,16 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
 
         var lead = await connection.QuerySingleOrDefaultAsync<Lead>(
             $"""
-            insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
-            values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
+            insert into leads (
+                email, name, interest, discount_code, discount_percent,
+                privacy_accepted, marketing_consent, source)
+            values (
+                lower(@email), @name, @interest, @discountCode, @discountPercent,
+                true, @marketingConsent, @source)
             on conflict (email) do nothing
             returning {Columns}
             """,
-            new { email, name, interest, discountCode, marketingConsent, source });
+            new { email, name, interest, discountCode, discountPercent, marketingConsent, source });
 
         if (lead is not null) return (lead, false);
 
