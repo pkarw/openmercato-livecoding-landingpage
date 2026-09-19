@@ -46,10 +46,12 @@ Frontend only, inside `client/`:
 
 ## Progress
 
+PR: #23
+
 > Convention: `- [ ]` pending, `- [x]` done. Append ` — <commit sha>` when a step lands. Do not rename step titles.
 
 ### Phase 1: Scannable QR in the hero
 
 - [x] 1.1 Add the renderer dependency — 999c9b8
 - [x] 1.2 Add `APP_URL` and the `AppQrCode` component — 6a017da
-- [x] 1.3 Mount it in the hero and verify — c761638
+- [x] 1.3 Mount it in the hero and verify — c761638 (review fixes: 6d937d3)
