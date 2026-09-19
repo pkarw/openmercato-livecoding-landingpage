@@ -9,18 +9,51 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
     private const string Columns =
         "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, created_at as CreatedAt";
 
+    private const string SelectByEmailSql = $"select {Columns} from leads where email = lower(@email)";
+
+    /// <summary>
+    /// Nothing here is worth more than a few seconds of a visitor's wait, and the URL-configured
+    /// pool only holds five connections — so a query that overruns this is abandoned rather than
+    /// left to occupy a slot until Npgsql's 30 s default expires.
+    /// </summary>
+    private const int CommandTimeoutSeconds = 10;
+
+    /// <summary>
+    /// Dapper's (sql, param) overloads build a command with <c>CancellationToken.None</c>, which
+    /// leaves a query running on the server after the caller has gone. Every statement below goes
+    /// through this instead, so the request's token reaches the command itself.
+    /// </summary>
+    private static CommandDefinition Command(
+        string sql,
+        object? parameters,
+        CancellationToken cancellationToken,
+        NpgsqlTransaction? transaction = null) =>
+        new(
+            sql,
+            parameters,
+            transaction: transaction,
+            commandTimeout: CommandTimeoutSeconds,
+            cancellationToken: cancellationToken);
+
     public async Task<Lead?> FindByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        return await connection.QuerySingleOrDefaultAsync<Lead>(
-            $"select {Columns} from leads where email = lower(@email)",
-            new { email });
+        return await connection.QuerySingleOrDefaultAsync<Lead>(Command(
+            SelectByEmailSql,
+            new { email },
+            cancellationToken));
     }
 
     /// <summary>
     /// Claiming twice with the same address keeps the original code instead of minting a new one,
     /// so a double submit (or a lost email) is harmless.
     /// </summary>
+    /// <remarks>
+    /// The claim endpoint is anonymous: knowing an address is not proof of owning it. A repeat claim
+    /// therefore reads the existing reservation back and writes nothing — otherwise anybody could
+    /// rewrite a stranger's stored interest or consent by posting their address (issue #3). Changing
+    /// a stored preference needs an ownership proof this endpoint does not have.
+    /// </remarks>
     public async Task<(Lead Lead, bool AlreadyClaimed)> ClaimAsync(
         string email,
         string? name,
@@ -35,77 +68,81 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        var lead = await connection.QuerySingleOrDefaultAsync<Lead>(
-            $"""
-            insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
-            values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
-            on conflict (email) do nothing
-            returning {Columns}
-            """,
-            new { email, name, interest, discountCode, marketingConsent, source },
-            transaction);
-
-        var alreadyClaimed = lead is null;
-
-        if (lead is null)
+        // Two attempts only matter in the race where the existing row is deleted between the
+        // insert and the read; the second pass then reserves the address outright.
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            // Someone already claimed with this address — hand back the code they were given, and
-            // record the latest interest so a second visit can widen the selection.
-            lead = await connection.QuerySingleAsync<Lead>(
+            var lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
                 $"""
-                update leads
-                   set interest = case when interest = @interest then interest else 'both' end,
-                       marketing_consent = marketing_consent or @marketingConsent,
-                       updated_at = now()
-                 where email = lower(@email)
+                insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
+                values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
+                on conflict (email) do nothing
                 returning {Columns}
                 """,
-                new { email, interest, marketingConsent },
-                transaction);
+                new { email, name, interest, discountCode, marketingConsent, source },
+                cancellationToken,
+                transaction));
+
+            var alreadyClaimed = lead is null;
+
+            if (lead is null)
+            {
+                lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
+                    SelectByEmailSql,
+                    new { email },
+                    cancellationToken,
+                    transaction));
+            }
+
+            if (lead is null) continue;
+
+            // The reservation and both independent delivery intents commit together. A duplicate
+            // claim can recover a pre-outbox reservation, while the unique key keeps concurrent
+            // submissions from creating duplicate work or replacing an existing payload snapshot.
+            await connection.ExecuteAsync(Command(
+                """
+                insert into lead_notification_deliveries (
+                  lead_id, kind, lead_email, lead_name, interest, discount_code,
+                  discount_percent, lead_created_at, leads_inbox)
+                values
+                  (@leadId, 'lead', @leadEmail, @leadName, @leadInterest, @leadDiscountCode,
+                   @discountPercent, @leadCreatedAt, @leadsInbox),
+                  (@leadId, 'inbox', @leadEmail, @leadName, @leadInterest, @leadDiscountCode,
+                   @discountPercent, @leadCreatedAt, @leadsInbox)
+                on conflict (lead_id, kind) do nothing
+                """,
+                new
+                {
+                    leadId = lead.Id,
+                    leadEmail = lead.Email,
+                    leadName = lead.Name,
+                    leadInterest = lead.Interest,
+                    leadDiscountCode = lead.DiscountCode,
+                    discountPercent,
+                    leadCreatedAt = lead.CreatedAt,
+                    leadsInbox,
+                },
+                cancellationToken,
+                transaction));
+
+            await transaction.CommitAsync(cancellationToken);
+            return (lead, alreadyClaimed);
         }
 
-        // The reservation and both independent delivery intents commit together. A duplicate claim
-        // can recover a pre-outbox reservation, while the unique key keeps concurrent submissions
-        // from creating duplicate work or replacing an existing payload snapshot.
-        await connection.ExecuteAsync(
-            """
-            insert into lead_notification_deliveries (
-              lead_id, kind, lead_email, lead_name, interest, discount_code,
-              discount_percent, lead_created_at, leads_inbox)
-            values
-              (@leadId, 'lead', @leadEmail, @leadName, @leadInterest, @leadDiscountCode,
-               @discountPercent, @leadCreatedAt, @leadsInbox),
-              (@leadId, 'inbox', @leadEmail, @leadName, @leadInterest, @leadDiscountCode,
-               @discountPercent, @leadCreatedAt, @leadsInbox)
-            on conflict (lead_id, kind) do nothing
-            """,
-            new
-            {
-                leadId = lead.Id,
-                leadEmail = lead.Email,
-                leadName = lead.Name,
-                leadInterest = lead.Interest,
-                leadDiscountCode = lead.DiscountCode,
-                discountPercent,
-                leadCreatedAt = lead.CreatedAt,
-                leadsInbox,
-            },
-            transaction);
-
-        await transaction.CommitAsync(cancellationToken);
-
-        return (lead, alreadyClaimed);
+        throw new InvalidOperationException(
+            "Could not reserve or read the lead for this address — it was created and removed concurrently.");
     }
 
     public async Task<int> CountAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        return await connection.ExecuteScalarAsync<int>("select count(*)::int from leads");
+        return await connection.ExecuteScalarAsync<int>(Command(
+            "select count(*)::int from leads", null, cancellationToken));
     }
 
     public async Task PingAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await connection.ExecuteScalarAsync<int>("select 1");
+        await connection.ExecuteScalarAsync<int>(Command("select 1", null, cancellationToken));
     }
 }

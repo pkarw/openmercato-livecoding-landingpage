@@ -18,7 +18,7 @@ export type ClaimRequest = {
 }
 
 export type ClaimResponse = {
-  /** The discount code stays server-side — it is emailed out separately. */
+  /** @deprecated Echoes the current request only; do not use it to infer saved lead state. */
   lead: {
     email: string
     name: string | null
@@ -27,6 +27,7 @@ export type ClaimResponse = {
   }
   discountPercent: number
   endsAt: string
+  /** @deprecated Always false so anonymous callers cannot probe whether an address exists. */
   alreadyClaimed: boolean
 }
 
