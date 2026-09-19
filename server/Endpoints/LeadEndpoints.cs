@@ -4,6 +4,7 @@ using Landing.Configuration;
 using Landing.Data;
 using Landing.Models;
 using Landing.Notifications;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Landing.Endpoints;
 
@@ -52,7 +53,7 @@ public static class LeadEndpoints
                     statusCode: StatusCodes.Status410Gone);
             }
 
-            var email = request.Email?.Trim() ?? string.Empty;
+            var email = request.Email ?? string.Empty;
             if (!IsEmail(email)) return Results.BadRequest(new { error = "A valid email address is required." });
 
             if (!Interests.IsValid(request.Interest))
@@ -70,11 +71,10 @@ public static class LeadEndpoints
                 return Results.BadRequest(new { error = "The discount code is delivered by email, so marketing consent is required." });
             }
 
-            var name = string.IsNullOrWhiteSpace(request.Name) ? null : request.Name.Trim();
             var code = DiscountCodes.Generate(request.Interest!, offer.DiscountPercent);
 
             var (lead, alreadyClaimed) = await leads.ClaimAsync(
-                email, name, request.Interest!, code, request.MarketingConsent, Truncate(request.Source, 200), ct);
+                email, request.Name, request.Interest!, code, request.MarketingConsent, request.Source, ct);
 
             await cache.DropAsync(CacheStore.LeadCountKey);
             await notifier.NotifyAsync(lead, alreadyClaimed, ct);
@@ -92,14 +92,29 @@ public static class LeadEndpoints
             return alreadyClaimed
                 ? Results.Ok(payload)
                 : Results.Created($"/api/leads/{lead.Id}", payload);
-        }).WithTags("Offer");
+        })
+            .WithMetadata(new RequestSizeLimitAttribute(LeadInputLimits.MaxRequestBodyBytes))
+            .AddEndpointFilter<LeadRequestBoundsFilter>()
+            .WithTags("Offer");
 
         return routes;
     }
 
     private static bool IsEmail(string value) =>
         MailAddress.TryCreate(value, out var address) && address.Host.Contains('.');
+}
 
-    private static string? Truncate(string? value, int max) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Length <= max ? value : value[..max];
+public sealed class LeadRequestBoundsFilter : IEndpointFilter
+{
+    public ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        var request = context.GetArgument<LeadRequest>(0);
+        if (!LeadRequestBounds.TryNormalize(request, out var normalized, out var error))
+        {
+            return ValueTask.FromResult<object?>(Results.BadRequest(new { error }));
+        }
+
+        context.Arguments[0] = normalized;
+        return next(context);
+    }
 }
