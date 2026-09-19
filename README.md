@@ -84,6 +84,32 @@ bash scripts/serve.sh db new add_utm      # scaffold db/migrations/<timestamp>_a
 `interest` is `openmercato`, `aitechleaders` or `both`. Both consents are mandatory — the API rejects a claim
 without them, and refuses anything sent after the deadline with `410 Gone`.
 
+The endpoint is anonymous, so an address is never treated as proof of owning it: **a repeat claim returns the
+existing reservation and changes nothing** — not the stored interest, not the consents, not the name. Changing a
+stored preference needs an ownership proof this endpoint does not have.
+
+## Tests
+
+`tests/Landing.Tests` runs against a real PostgreSQL. The fixture creates a throwaway `landing_test_<guid>`
+database, applies `db/migrations/*.sql` through the app's own migration runner, and drops it afterwards.
+
+```bash
+export LANDING_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres
+bash scripts/dotnet.sh test tests/Landing.Tests
+```
+
+`LANDING_TEST_DATABASE_URL` is deliberately separate from `DATABASE_URL`: the tests never fall back to the
+application's database, and must never be pointed at production.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+
+| Job | What it runs |
+| --- | --- |
+| Client | `npm --prefix client ci`, `run typecheck`, `run build` |
+| Server | `scripts/dotnet.sh build server`, then `scripts/dotnet.sh test tests/Landing.Tests` against a `postgres:17` service container |
+
 ## Environment
 
 Copy `.env.example` to `.env` and fill in the secrets; machine-specific overrides belong in `.env.local`.
