@@ -72,6 +72,7 @@ bash scripts/serve.sh db new add_utm      # scaffold db/migrations/<timestamp>_a
 | `001_init.sql` | the task board this repository started from |
 | `002_leads.sql` | `leads` — email, interest, consents, reserved code, source |
 | `003_drop_task_board.sql` | drops the old `tasks` table |
+| `004_lead_notification_deliveries.sql` | durable, independently retried lead and inbox email deliveries |
 
 ## API
 
@@ -79,10 +80,18 @@ bash scripts/serve.sh db new add_utm      # scaffold db/migrations/<timestamp>_a
 | --- | --- | --- |
 | `GET` | `/api/offer` | Discount percentage, deadline, whether it is still live, how many people claimed |
 | `POST` | `/api/leads` | Reserve a discount: `{ email, name?, interest, privacyAccepted, marketingConsent, source? }` |
-| `GET` | `/api/health` | PostgreSQL and Redis connectivity |
+| `GET` | `/api/health` | PostgreSQL/Redis connectivity and notification queue status |
 
 `interest` is `openmercato`, `aitechleaders` or `both`. Both consents are mandatory — the API rejects a claim
 without them, and refuses anything sent after the deadline with `410 Gone`.
+
+Email delivery is asynchronous after the reservation commits. PostgreSQL keeps one lead and one inbox delivery per
+reservation, workers lease them safely across instances, and retryable provider failures use bounded backoff. The
+health response reports pending/failed counts and whether Resend is configured; terminal failures also produce an
+error log. Delivery rows are retained as the operational audit for this campaign; cleanup is an explicit operator
+decision rather than an automatic expiry. The migration is additive, so an older binary ignores the queue during
+rollback, but delivery pauses until the new binary returns. Drop `lead_notification_deliveries` only after deciding
+that its pending/failed work can be discarded.
 
 ## Environment
 
