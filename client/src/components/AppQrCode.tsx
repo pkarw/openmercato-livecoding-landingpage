@@ -2,7 +2,9 @@ import { QRCodeSVG } from 'qrcode.react'
 import { APP_URL } from '@/lib/offers'
 import { cn } from '@/lib/utils'
 
-const APP_HOST = new URL(APP_URL).host
+/** Derived with string ops, not `new URL()`: a malformed constant would throw while this
+ *  module is evaluated and take the whole page down, not just this card. */
+const APP_HOST = APP_URL.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
 
 /**
  * The page is dark-only (`<html class="dark">` in index.html), so the tile the code
@@ -10,14 +12,14 @@ const APP_HOST = new URL(APP_URL).host
  * dark-on-light symbol and reject an inverted one. The link below it is the real
  * fallback — nobody has to own a camera to get to the URL.
  *
- * The caller owns the display class (the hero passes `hidden md:flex`), so nothing
- * here sets `flex` itself.
+ * Lays itself out by default; a caller's display class still wins, so the hero's
+ * `hidden md:flex` keeps it off small screens.
  */
 export function AppQrCode({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'flex-col items-center gap-3 rounded-2xl border border-border bg-card p-5 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.9)]',
+        'flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-5 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.9)]',
         className,
       )}
     >
