@@ -66,3 +66,10 @@ export function discounted(product: Product, percent: number): string {
 }
 
 export const PRIVACY_URL = 'https://openmercatocloud.com/privacy'
+
+/**
+ * Where this landing page is deployed — the target the hero QR code encodes.
+ * Deployment-specific: the `app-<uuid>` host belongs to one deployment, so a
+ * redeploy under a new id makes this dead and has to be updated here.
+ */
+export const APP_URL = 'https://app-54e0f829-998a-4972-a681-23fc364f32e8.apps-v2.openmercatocloud.com/'

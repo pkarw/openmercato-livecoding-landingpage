@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, Clock, ShieldCheck, Sparkles, Users } from 'lucide-react'
+import { AppQrCode } from '@/components/AppQrCode'
 import { AiTechLeadersLogo, OpenMercatoLogo } from '@/components/Brand'
 import { ClaimForm } from '@/components/ClaimForm'
 import { ClaimedCard } from '@/components/ClaimedCard'
@@ -109,6 +110,8 @@ export default function App() {
                   Reserve my discount
                 </a>
               </Button>
+              {/* Desktop only: a phone visitor is already on the device they would scan with. */}
+              <AppQrCode className="mt-2 hidden md:flex" />
             </div>
           </div>
         </section>
