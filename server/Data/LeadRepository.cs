@@ -9,6 +9,8 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
     private const string Columns =
         "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, created_at as CreatedAt";
 
+    private const string SelectByEmailSql = $"select {Columns} from leads where email = lower(@email)";
+
     /// <summary>
     /// Nothing here is worth more than a few seconds of a visitor's wait, and the URL-configured
     /// pool only holds five connections — so a query that overruns this is abandoned rather than
@@ -28,7 +30,7 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         return await connection.QuerySingleOrDefaultAsync<Lead>(Command(
-            $"select {Columns} from leads where email = lower(@email)",
+            SelectByEmailSql,
             new { email },
             cancellationToken));
     }
@@ -37,6 +39,12 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
     /// Claiming twice with the same address keeps the original code instead of minting a new one,
     /// so a double submit (or a lost email) is harmless.
     /// </summary>
+    /// <remarks>
+    /// The claim endpoint is anonymous: knowing an address is not proof of owning it. A repeat claim
+    /// therefore reads the existing reservation back and writes nothing — otherwise anybody could
+    /// rewrite a stranger's stored interest or consent by posting their address (issue #3). Changing
+    /// a stored preference needs an ownership proof this endpoint does not have.
+    /// </remarks>
     public async Task<(Lead Lead, bool AlreadyClaimed)> ClaimAsync(
         string email,
         string? name,
@@ -48,33 +56,31 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        var lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
-            $"""
-            insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
-            values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
-            on conflict (email) do nothing
-            returning {Columns}
-            """,
-            new { email, name, interest, discountCode, marketingConsent, source },
-            cancellationToken));
+        // Two attempts only matter in the race where the existing row is deleted between the
+        // insert and the read; the second pass then reserves the address outright.
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
+                $"""
+                insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
+                values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
+                on conflict (email) do nothing
+                returning {Columns}
+                """,
+                new { email, name, interest, discountCode, marketingConsent, source },
+                cancellationToken));
 
-        if (lead is not null) return (lead, false);
+            if (lead is not null) return (lead, false);
 
-        // Someone already claimed with this address — hand back the code they were given, and
-        // record the latest interest so a second visit can widen the selection.
-        var existing = await connection.QuerySingleAsync<Lead>(Command(
-            $"""
-            update leads
-               set interest = case when interest = @interest then interest else 'both' end,
-                   marketing_consent = marketing_consent or @marketingConsent,
-                   updated_at = now()
-             where email = lower(@email)
-            returning {Columns}
-            """,
-            new { email, interest, marketingConsent },
-            cancellationToken));
+            var existing = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
+                SelectByEmailSql,
+                new { email },
+                cancellationToken));
+            if (existing is not null) return (existing, true);
+        }
 
-        return (existing, true);
+        throw new InvalidOperationException(
+            "Could not reserve or read the lead for this address — it was created and removed concurrently.");
     }
 
     public async Task<int> CountAsync(CancellationToken cancellationToken = default)

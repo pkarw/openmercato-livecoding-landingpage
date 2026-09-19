@@ -9,29 +9,50 @@ public static class HealthEndpoints
 {
     public static IEndpointRouteBuilder MapHealthEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.MapGet("/api/health", async (LeadRepository leads, CacheStore cache, CancellationToken ct) =>
-        {
-            var postgres = await Probe(() => leads.PingAsync(ct), ct);
-            var redis = cache.Enabled
-                ? await Probe(cache.PingAsync, ct)
-                : new ProbeResult(false, "REDIS_URL is not configured");
-
-            return Results.Json(
-                new { status = postgres.Ok && redis.Ok ? "ok" : "degraded", postgres, redis },
-                statusCode: postgres.Ok ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
-        }).WithTags("Health");
+        routes.MapGet("/api/health", (
+            LeadRepository leads,
+            CacheStore cache,
+            ILoggerFactory loggerFactory,
+            HttpContext context,
+            CancellationToken ct) => CheckHealthAsync(
+                () => leads.PingAsync(ct),
+                cache.Enabled,
+                cache.PingAsync,
+                loggerFactory.CreateLogger("Landing.Endpoints.Health"),
+                context.TraceIdentifier,
+                ct)).WithTags("Health");
 
         return routes;
     }
 
-    // A probe failure is the answer this endpoint exists to give, so every exception becomes a
-    // result — except the caller hanging up. Reporting that as "postgres is down" would invent a
-    // diagnosis out of a cancelled request, so it is rethrown and the pipeline abandons the reply.
-    private static async Task<ProbeResult> Probe(Func<Task> probe, CancellationToken cancellationToken)
+    internal static async Task<IResult> CheckHealthAsync(
+        Func<Task> pingPostgres,
+        bool redisEnabled,
+        Func<Task> pingRedis,
+        ILogger logger,
+        string correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        var postgres = await Probe(pingPostgres, "postgres", logger, correlationId, cancellationToken);
+        var redis = redisEnabled
+            ? await Probe(pingRedis, "redis", logger, correlationId, cancellationToken)
+            : new ProbeResult(false, "disabled");
+
+        return Results.Json(
+            new { status = postgres.Ok && redis.Ok ? "ok" : "degraded", postgres, redis },
+            statusCode: postgres.Ok ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+    }
+
+    private static async Task<ProbeResult> Probe(
+        Func<Task> probe,
+        string dependency,
+        ILogger logger,
+        string correlationId,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await probe();
+            await probe().WaitAsync(cancellationToken);
             return new ProbeResult(true, null);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -40,7 +61,13 @@ public static class HealthEndpoints
         }
         catch (Exception ex)
         {
-            return new ProbeResult(false, ex.Message);
+            logger.LogWarning(
+                "Health probe {Dependency} failed. CorrelationId: {CorrelationId}; ExceptionType: {ExceptionType}; HResult: {HResult}",
+                dependency,
+                correlationId,
+                ex.GetType().FullName,
+                ex.HResult);
+            return new ProbeResult(false, "unavailable");
         }
     }
 }
