@@ -101,6 +101,17 @@ Both `.env` and `.env.local` are git-ignored — never commit a real `RESEND_API
 | `ADMIN_EMAIL` | From-address, must be on a domain verified in Resend |
 | `LEADS_INBOX` | Where lead notifications land (default `info@openmercato.com`) |
 
+### Credential safety
+
+CI runs Gitleaks against the checked-out tree and proves the detector with a generated fake-secret fixture. To run the same checks locally, install Gitleaks and use:
+
+```bash
+scripts/test-secret-scan.sh
+gitleaks dir --no-banner --redact .
+```
+
+If a real credential reaches Git, removing the file is not enough. Revoke or rotate the credential with its service owner, update deployment secret storage, and review repository access and history privately. Coordinate any history rewrite with every clone owner; the current-tree scan deliberately does not claim that existing history is clean.
+
 ## Layout
 
 ```
