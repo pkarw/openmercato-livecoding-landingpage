@@ -71,10 +71,15 @@ public static class LeadEndpoints
             }
 
             var name = string.IsNullOrWhiteSpace(request.Name) ? null : request.Name.Trim();
-            var code = DiscountCodes.Generate(request.Interest!, offer.DiscountPercent);
 
             var (lead, alreadyClaimed) = await leads.ClaimAsync(
-                email, name, request.Interest!, code, request.MarketingConsent, Truncate(request.Source, 200), ct);
+                email,
+                name,
+                request.Interest!,
+                () => DiscountCodes.Generate(request.Interest!, offer.DiscountPercent),
+                request.MarketingConsent,
+                Truncate(request.Source, 200),
+                ct);
 
             await cache.DropAsync(CacheStore.LeadCountKey);
             await notifier.NotifyAsync(lead, alreadyClaimed, ct);
