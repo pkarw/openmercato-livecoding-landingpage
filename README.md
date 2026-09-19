@@ -107,7 +107,7 @@ CI runs Gitleaks against the checked-out tree and proves the detector with a gen
 
 ```bash
 scripts/test-secret-scan.sh
-gitleaks dir --no-banner --redact .
+scripts/check-secrets.sh
 ```
 
 If a real credential reaches Git, removing the file is not enough. Revoke or rotate the credential with its service owner, update deployment secret storage, and review repository access and history privately. Coordinate any history rewrite with every clone owner; the current-tree scan deliberately does not claim that existing history is clean.
