@@ -50,6 +50,6 @@ Frontend only, inside `client/`:
 
 ### Phase 1: Scannable QR in the hero
 
-- [ ] 1.1 Add the renderer dependency
-- [ ] 1.2 Add `APP_URL` and the `AppQrCode` component
-- [ ] 1.3 Mount it in the hero and verify
+- [x] 1.1 Add the renderer dependency — 999c9b8
+- [x] 1.2 Add `APP_URL` and the `AppQrCode` component — 6a017da
+- [x] 1.3 Mount it in the hero and verify — c761638
