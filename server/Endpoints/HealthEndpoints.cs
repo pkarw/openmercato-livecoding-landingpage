@@ -19,7 +19,8 @@ public static class HealthEndpoints
                 cache.Enabled,
                 cache.PingAsync,
                 loggerFactory.CreateLogger("Landing.Endpoints.Health"),
-                context.TraceIdentifier)).WithTags("Health");
+                context.TraceIdentifier,
+                ct)).WithTags("Health");
 
         return routes;
     }
@@ -29,11 +30,12 @@ public static class HealthEndpoints
         bool redisEnabled,
         Func<Task> pingRedis,
         ILogger logger,
-        string correlationId)
+        string correlationId,
+        CancellationToken cancellationToken = default)
     {
-        var postgres = await Probe(pingPostgres, "postgres", logger, correlationId);
+        var postgres = await Probe(pingPostgres, "postgres", logger, correlationId, cancellationToken);
         var redis = redisEnabled
-            ? await Probe(pingRedis, "redis", logger, correlationId)
+            ? await Probe(pingRedis, "redis", logger, correlationId, cancellationToken)
             : new ProbeResult(false, "disabled");
 
         return Results.Json(
@@ -45,12 +47,17 @@ public static class HealthEndpoints
         Func<Task> probe,
         string dependency,
         ILogger logger,
-        string correlationId)
+        string correlationId,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await probe();
+            await probe().WaitAsync(cancellationToken);
             return new ProbeResult(true, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
