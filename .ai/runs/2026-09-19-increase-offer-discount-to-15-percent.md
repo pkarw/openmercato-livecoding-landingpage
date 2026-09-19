@@ -53,5 +53,5 @@ Reserve and communicate a stable per-lead discount so new reservations receive 1
 
 ### Phase 2: Activate and verify 15%
 
-- [ ] 2.1 Align repository-owned offer defaults, metadata, test configuration, and documentation to 15%
+- [x] 2.1 Align repository-owned offer defaults, metadata, test configuration, and documentation to 15% — 18a13c5
 - [ ] 2.2 Run the full validation, integration, stale-reference, review, and UI verification gates
