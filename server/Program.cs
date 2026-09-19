@@ -32,7 +32,13 @@ builder.Services.AddSingleton(OfferSettings.FromEnvironment());
 // Resend — the discount code goes to the lead, a copy of the lead goes to the inbox.
 builder.Services.AddSingleton(EmailSettings.FromEnvironment());
 builder.Services.AddHttpClient<ResendEmailSender>(client => client.Timeout = TimeSpan.FromSeconds(10));
-builder.Services.AddTransient<LeadNotifier>();
+builder.Services.AddSingleton<IEmailSender>(provider => provider.GetRequiredService<ResendEmailSender>());
+builder.Services.AddSingleton<LeadNotifier>();
+builder.Services.AddSingleton<NotificationDeliveryRepository>();
+builder.Services.AddSingleton<INotificationDeliveryStore>(provider =>
+    provider.GetRequiredService<NotificationDeliveryRepository>());
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<NotificationDeliveryWorker>();
 
 builder.Services.AddSingleton(provider => new Migrator(
     provider.GetRequiredService<NpgsqlDataSource>(),

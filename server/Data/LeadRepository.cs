@@ -23,8 +23,17 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
     /// leaves a query running on the server after the caller has gone. Every statement below goes
     /// through this instead, so the request's token reaches the command itself.
     /// </summary>
-    private static CommandDefinition Command(string sql, object? parameters, CancellationToken cancellationToken) =>
-        new(sql, parameters, commandTimeout: CommandTimeoutSeconds, cancellationToken: cancellationToken);
+    private static CommandDefinition Command(
+        string sql,
+        object? parameters,
+        CancellationToken cancellationToken,
+        NpgsqlTransaction? transaction = null) =>
+        new(
+            sql,
+            parameters,
+            transaction: transaction,
+            commandTimeout: CommandTimeoutSeconds,
+            cancellationToken: cancellationToken);
 
     public async Task<Lead?> FindByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
@@ -50,11 +59,14 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
         string? name,
         string interest,
         string discountCode,
+        int discountPercent,
+        string leadsInbox,
         bool marketingConsent,
         string? source,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         // Two attempts only matter in the race where the existing row is deleted between the
         // insert and the read; the second pass then reserves the address outright.
@@ -68,15 +80,53 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
                 returning {Columns}
                 """,
                 new { email, name, interest, discountCode, marketingConsent, source },
-                cancellationToken));
+                cancellationToken,
+                transaction));
 
-            if (lead is not null) return (lead, false);
+            var alreadyClaimed = lead is null;
 
-            var existing = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
-                SelectByEmailSql,
-                new { email },
-                cancellationToken));
-            if (existing is not null) return (existing, true);
+            if (lead is null)
+            {
+                lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
+                    SelectByEmailSql,
+                    new { email },
+                    cancellationToken,
+                    transaction));
+            }
+
+            if (lead is null) continue;
+
+            // The reservation and both independent delivery intents commit together. A duplicate
+            // claim can recover a pre-outbox reservation, while the unique key keeps concurrent
+            // submissions from creating duplicate work or replacing an existing payload snapshot.
+            await connection.ExecuteAsync(Command(
+                """
+                insert into lead_notification_deliveries (
+                  lead_id, kind, lead_email, lead_name, interest, discount_code,
+                  discount_percent, lead_created_at, leads_inbox)
+                values
+                  (@leadId, 'lead', @leadEmail, @leadName, @leadInterest, @leadDiscountCode,
+                   @discountPercent, @leadCreatedAt, @leadsInbox),
+                  (@leadId, 'inbox', @leadEmail, @leadName, @leadInterest, @leadDiscountCode,
+                   @discountPercent, @leadCreatedAt, @leadsInbox)
+                on conflict (lead_id, kind) do nothing
+                """,
+                new
+                {
+                    leadId = lead.Id,
+                    leadEmail = lead.Email,
+                    leadName = lead.Name,
+                    leadInterest = lead.Interest,
+                    leadDiscountCode = lead.DiscountCode,
+                    discountPercent,
+                    leadCreatedAt = lead.CreatedAt,
+                    leadsInbox,
+                },
+                cancellationToken,
+                transaction));
+
+            await transaction.CommitAsync(cancellationToken);
+            return (lead, alreadyClaimed);
         }
 
         throw new InvalidOperationException(
