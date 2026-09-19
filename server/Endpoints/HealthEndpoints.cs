@@ -11,9 +11,9 @@ public static class HealthEndpoints
     {
         routes.MapGet("/api/health", async (LeadRepository leads, CacheStore cache, CancellationToken ct) =>
         {
-            var postgres = await Probe(() => leads.PingAsync(ct));
+            var postgres = await Probe(() => leads.PingAsync(ct), ct);
             var redis = cache.Enabled
-                ? await Probe(cache.PingAsync)
+                ? await Probe(cache.PingAsync, ct)
                 : new ProbeResult(false, "REDIS_URL is not configured");
 
             return Results.Json(
@@ -24,12 +24,19 @@ public static class HealthEndpoints
         return routes;
     }
 
-    private static async Task<ProbeResult> Probe(Func<Task> probe)
+    // A probe failure is the answer this endpoint exists to give, so every exception becomes a
+    // result — except the caller hanging up. Reporting that as "postgres is down" would invent a
+    // diagnosis out of a cancelled request, so it is rethrown and the pipeline abandons the reply.
+    private static async Task<ProbeResult> Probe(Func<Task> probe, CancellationToken cancellationToken)
     {
         try
         {
             await probe();
             return new ProbeResult(true, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
