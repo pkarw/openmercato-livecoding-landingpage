@@ -111,10 +111,23 @@ server/            ASP.NET Core app — minimal APIs, static hosting, SPA fallba
   Data/            Dapper repository, migration runner, db CLI verbs
   Notifications/   Resend client and the two lead emails
 db/migrations/     SQL migrations, applied in filename order
-scripts/           dotnet.sh (SDK bootstrap), build.sh, serve.sh
+scripts/           dotnet.sh (SDK bootstrap), postgres.sh (db guard, + postgres.test.sh), build.sh, serve.sh
 ```
 
 ## Sandbox
 
 `openmercato.toml` builds the client, publishes the server, applies migrations, and previews
 `scripts/serve.sh` on `0.0.0.0:3000`. Apply changes with `workspace-agent-cli start`.
+
+The sandbox is snapshotted and resumed rather than shut down, so PostgreSQL can come back with a
+`postmaster.pid` naming a PID that has since been recycled by another process. PostgreSQL then
+refuses to start (`lock file "postmaster.pid" already exists`), PM2 exhausts its restart budget, and
+every request fails on `Failed to connect to 127.0.0.1:5432`. `scripts/serve.sh` runs
+`scripts/postgres.sh` first, which clears provably stale lock files and restarts the service. It is a
+no-op when the database is already up, and anywhere there is nothing to recover — no writable
+`$PGDATA` and no pm2 service — so a clone pointing `DATABASE_URL` at Docker or a managed instance is
+never delayed by it. A postmaster that is listening only on its unix socket counts as up and is left
+alone. The durable fix belongs in the image's root-owned `/usr/local/bin/workspace-postgres`.
+
+Run `bash scripts/postgres.test.sh` after touching the guard: it covers the connection-string forms
+the app accepts, `.env` precedence, and that neither branch waits or deletes anything it should not.
