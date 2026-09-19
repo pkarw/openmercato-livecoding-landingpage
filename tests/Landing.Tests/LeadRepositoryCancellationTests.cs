@@ -56,17 +56,20 @@ public sealed class LeadRepositoryCancellationTests(PostgresFixture postgres) : 
 
     /// <summary>
     /// The reason this matters: ConnectionUrls caps the URL-configured pool at five connections,
-    /// so five abandoned queries are enough to lock the whole process out of the database.
+    /// so a handful of abandoned queries is enough to lock the whole process out of the database.
+    /// The cap is read back from the data source rather than hardcoded — pinning the number here
+    /// would leave the test passing while proving nothing if ConnectionUrls ever raised it.
     /// </summary>
     [Fact]
     public async Task CancelledQueriesGiveTheirPooledConnectionsBack()
     {
-        const int MaxPoolSize = 5;
+        var maxPoolSize = new NpgsqlConnectionStringBuilder(postgres.DataSource.ConnectionString).MaxPoolSize;
+        Assert.InRange(maxPoolSize, 1, 50); // a cap this test can actually exhaust
 
         await using var theLock = await TableLock.TakeAsync(postgres.DataSource);
         using var cts = new CancellationTokenSource();
 
-        var blocked = Enumerable.Range(0, MaxPoolSize)
+        var blocked = Enumerable.Range(0, maxPoolSize)
             .Select(_ => postgres.Leads.CountAsync(cts.Token))
             .ToArray();
         foreach (var query in blocked) await WaitUntilBlockedAsync(query);
