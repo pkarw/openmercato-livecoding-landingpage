@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Clock, ShieldCheck, Sparkles, Users } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, ArrowRight, Clock, Loader2, RefreshCw, ShieldCheck, Sparkles, Users } from 'lucide-react'
 import { AppQrCode } from '@/components/AppQrCode'
 import { AiTechLeadersLogo, OpenMercatoLogo } from '@/components/Brand'
 import { ClaimForm } from '@/components/ClaimForm'
@@ -12,22 +12,103 @@ import { Separator } from '@/components/ui/separator'
 import { api, type ClaimResponse, type Offer } from '@/lib/api'
 import { PRIVACY_URL, toInterest, type ProductKey } from '@/lib/offers'
 
-const FALLBACK_OFFER: Offer = {
-  discountPercent: 15,
-  endsAt: '2026-09-20T23:59:59+02:00',
-  active: true,
-  claimed: 0,
-  source: 'postgres',
+export type OfferState =
+  | { status: 'loading' }
+  | { status: 'loaded'; offer: Offer }
+  | { status: 'failed' }
+
+export async function loadOffer(
+  request: () => Promise<Offer>,
+  publish: (state: OfferState) => void,
+): Promise<void> {
+  publish({ status: 'loading' })
+  try {
+    publish({ status: 'loaded', offer: await request() })
+  } catch {
+    publish({ status: 'failed' })
+  }
 }
 
 export default function App() {
-  const [offer, setOffer] = useState<Offer>(FALLBACK_OFFER)
-  const [selected, setSelected] = useState<ProductKey[]>(['openmercato', 'aitechleaders'])
-  const [claimed, setClaimed] = useState<ClaimResponse | null>(null)
+  const [offerState, setOfferState] = useState<OfferState>({ status: 'loading' })
+  const requestSequence = useRef(0)
+
+  const loadCurrentOffer = useCallback(async () => {
+    const requestId = ++requestSequence.current
+    await loadOffer(api.offer, (state) => {
+      if (requestSequence.current === requestId) setOfferState(state)
+    })
+  }, [])
 
   useEffect(() => {
-    api.offer().then(setOffer).catch(() => setOffer(FALLBACK_OFFER))
-  }, [])
+    void loadCurrentOffer()
+    return () => {
+      requestSequence.current += 1
+    }
+  }, [loadCurrentOffer])
+
+  if (offerState.status !== 'loaded') {
+    return <OfferStatus state={offerState} onRetry={loadCurrentOffer} />
+  }
+
+  return <OfferPage offer={offerState.offer} />
+}
+
+export function OfferStatus({
+  state,
+  onRetry,
+}: {
+  state: { status: 'loading' | 'failed' }
+  onRetry: () => void
+}) {
+  const loading = state.status === 'loading'
+
+  return (
+    <div className="flex min-h-svh flex-col">
+      <header className="border-b border-border/70 bg-background/80">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:gap-4 sm:px-6">
+          <OpenMercatoLogo />
+          <span className="hidden h-5 w-px bg-border sm:block" />
+          <AiTechLeadersLogo className="hidden sm:flex" />
+        </div>
+      </header>
+
+      <main className="glow-grid flex flex-1 items-center justify-center px-4 py-16">
+        <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-8 text-center shadow-[0_24px_60px_-40px_rgba(0,0,0,0.9)]">
+          {loading ? (
+            <div className="space-y-4" role="status" aria-live="polite">
+              <Loader2 className="mx-auto size-8 animate-spin text-primary" aria-hidden="true" />
+              <div className="space-y-2">
+                <h1 className="text-2xl font-bold tracking-tight">Loading the current offer</h1>
+                <p className="text-sm text-muted-foreground">
+                  We are checking the campaign details before enabling claims.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <AlertCircle className="mx-auto size-8 text-destructive" aria-hidden="true" />
+              <div className="space-y-2" role="alert">
+                <h1 className="text-2xl font-bold tracking-tight">We could not load the offer</h1>
+                <p className="text-sm text-muted-foreground">
+                  Campaign terms and claims stay unavailable until we can confirm the current offer.
+                </p>
+              </div>
+              <Button type="button" onClick={onRetry}>
+                <RefreshCw className="size-4" />
+                Try again
+              </Button>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export function OfferPage({ offer }: { offer: Offer }) {
+  const [selected, setSelected] = useState<ProductKey[]>(['openmercato', 'aitechleaders'])
+  const [claimed, setClaimed] = useState<ClaimResponse | null>(null)
 
   const { total } = useCountdown(offer.endsAt)
   const live = offer.active && total > 0
@@ -58,12 +139,21 @@ export default function App() {
             <span className="hidden h-5 w-px bg-border sm:block" />
             <AiTechLeadersLogo className="hidden sm:flex" />
           </div>
-          <Button asChild size="sm" className="font-semibold">
-            <a href="#claim">
-              Claim -{offer.discountPercent}%
-              <ArrowRight className="size-4" />
-            </a>
-          </Button>
+          {live ? (
+            <Button asChild size="sm" className="font-semibold">
+              <a href="#claim">
+                Claim -{offer.discountPercent}%
+                <ArrowRight className="size-4" />
+              </a>
+            </Button>
+          ) : (
+            <Button asChild size="sm" variant="outline" className="font-semibold">
+              <a href="https://openmercatocloud.com/" target="_blank" rel="noreferrer">
+                Visit Open Mercato
+                <ArrowRight className="size-4" />
+              </a>
+            </Button>
+          )}
         </div>
       </header>
 
@@ -76,20 +166,37 @@ export default function App() {
               className="mb-6 max-w-full gap-2 border-primary/40 bg-primary/10 px-3 py-1 text-[10px] font-semibold tracking-[0.16em] whitespace-normal text-primary uppercase sm:text-xs sm:tracking-[0.18em]"
             >
               <Clock className="size-3.5 shrink-0" />
-              <span className="hidden sm:inline">Limited — ends {deadline}</span>
-              <span className="sm:hidden">Limited — ends Sunday {shortDeadline}</span>
+              {live ? (
+                <>
+                  <span className="hidden sm:inline">Limited — ends {deadline}</span>
+                  <span className="sm:hidden">Limited — ends {shortDeadline}</span>
+                </>
+              ) : (
+                <span>Offer ended {deadline}</span>
+              )}
             </Badge>
 
             <h1 className="mx-auto max-w-4xl text-4xl leading-[1.05] font-extrabold tracking-[-0.03em] text-balance sm:text-6xl">
-              Take <span className="text-primary">-{offer.discountPercent}%</span> off Open Mercato Cloud and the
-              AI Tech Leaders training
+              {live ? (
+                <>
+                  Take <span className="text-primary">-{offer.discountPercent}%</span> off Open Mercato Cloud and the
+                  AI Tech Leaders training
+                </>
+              ) : (
+                <>
+                  The <span className="text-primary">-{offer.discountPercent}%</span> offer has ended
+                </>
+              )}
             </h1>
 
-            <p className="hand-note mt-5 text-2xl text-primary/90">one form, one code, your pick</p>
+            <p className="hand-note mt-5 text-2xl text-primary/90">
+              {live ? 'one form, one code, your pick' : 'thank you for checking in'}
+            </p>
 
             <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Sandboxes where agents build your business app, and the 5-week program that teaches your team the
-              process behind them. Pick one or take both — leave your email and we will send your personal code before the window closes.
+              {live
+                ? 'Sandboxes where agents build your business app, and the 5-week program that teaches your team the process behind them. Pick one or take both — leave your email and we will send your personal code before the window closes.'
+                : 'This campaign is no longer accepting claims. Both products are still open for business, and you can visit Open Mercato Cloud to learn what comes next.'}
             </p>
 
             <div className="mt-10 flex flex-col items-center gap-5">
@@ -104,12 +211,21 @@ export default function App() {
                   Consent-based, GDPR-friendly
                 </span>
               </div>
-              <Button asChild size="lg" className="h-12 px-8 text-base font-semibold">
-                <a href="#claim">
-                  <Sparkles className="size-4" />
-                  Reserve my discount
-                </a>
-              </Button>
+              {live ? (
+                <Button asChild size="lg" className="h-12 px-8 text-base font-semibold">
+                  <a href="#claim">
+                    <Sparkles className="size-4" />
+                    Reserve my discount
+                  </a>
+                </Button>
+              ) : (
+                <Button asChild size="lg" variant="outline" className="h-12 px-8 text-base font-semibold">
+                  <a href="https://openmercatocloud.com/" target="_blank" rel="noreferrer">
+                    Visit openmercatocloud.com
+                    <ArrowRight className="size-4" />
+                  </a>
+                </Button>
+              )}
               {/* Desktop only: a phone visitor is already on the device they would scan with. */}
               <AppQrCode className="mt-2 hidden md:flex" />
             </div>
@@ -118,25 +234,33 @@ export default function App() {
 
         {/* Pick + claim */}
         <section id="claim" className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6 sm:py-20">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-12">
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-                  Step 1
-                </span>
-                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">What is the code for?</h2>
-                <p className="text-sm text-muted-foreground">
-                  Select one or both. Your choice is saved with the lead, so the code we issue matches it.
-                </p>
-              </div>
+          <div
+            className={
+              live
+                ? 'grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-12'
+                : 'mx-auto max-w-xl'
+            }
+          >
+            {live && (
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <span className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                    Step 1
+                  </span>
+                  <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">What is the code for?</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Select one or both. Your choice is saved with the lead, so the code we issue matches it.
+                  </p>
+                </div>
 
-              <OfferPicker selected={selected} onToggle={toggle} discountPercent={offer.discountPercent} />
-            </div>
+                <OfferPicker selected={selected} onToggle={toggle} discountPercent={offer.discountPercent} />
+              </div>
+            )}
 
             <div className="lg:sticky lg:top-24 lg:self-start">
               <div className="rounded-2xl border border-border bg-card p-6 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.9)] sm:p-8">
                 {claimed ? (
-                  <ClaimedCard result={claimed} liveDiscountPercent={offer.discountPercent} />
+                  <ClaimedCard result={claimed} />
                 ) : live ? (
                   <div className="space-y-6">
                     <div className="space-y-2">

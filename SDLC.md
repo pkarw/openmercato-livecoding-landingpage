@@ -29,6 +29,7 @@ Triage and deduplicate before starting. Claim implementation work using assignee
 
 ## Validation
 
+- `npm --prefix client test`
 - `npm --prefix client run typecheck`
 - `npm --prefix client run build`
 - `bash scripts/dotnet.sh build server --no-restore`

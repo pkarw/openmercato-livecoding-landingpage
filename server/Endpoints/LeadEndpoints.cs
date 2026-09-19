@@ -81,18 +81,22 @@ public static class LeadEndpoints
             await notifier.NotifyAsync(lead, alreadyClaimed, ct);
             logger.LogInformation("Lead {Status} for {Interest}", alreadyClaimed ? "returning" : "captured", lead.Interest);
 
-            // The code itself stays server-side — it is emailed out separately, closer to launch.
-            var payload = new
+            // Keep the legacy fields as a compatibility bridge, but populate them only from this
+            // request. Returning persisted values or the real duplicate state would let anyone
+            // probe whether an address is registered and recover that person's saved details.
+            return Results.Ok(new
             {
-                lead = new { lead.Email, lead.Name, lead.Interest, lead.CreatedAt },
-                discountPercent = lead.DiscountPercent,
+                lead = new
+                {
+                    Email = email,
+                    Name = name,
+                    Interest = request.Interest!,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+                discountPercent = offer.DiscountPercent,
                 endsAt = offer.EndsAt,
-                alreadyClaimed,
-            };
-
-            return alreadyClaimed
-                ? Results.Ok(payload)
-                : Results.Created($"/api/leads/{lead.Id}", payload);
+                alreadyClaimed = false,
+            });
         }).WithTags("Offer");
 
         return routes;
