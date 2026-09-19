@@ -218,7 +218,7 @@ cat > "$QA_ROOT/.env" <<EOF
 # om-prepare-test-env: disposable QA values only. Never add real credentials here.
 DATABASE_URL=$QA_DB_URL
 PORT=$PORT_TO_USE
-OFFER_DISCOUNT_PERCENT=10
+OFFER_DISCOUNT_PERCENT=15
 OFFER_ENDS_AT=2026-09-20T23:59:59+02:00
 EOF
 chmod 600 "$QA_ROOT/.env"

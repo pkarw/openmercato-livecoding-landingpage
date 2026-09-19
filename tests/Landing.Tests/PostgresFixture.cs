@@ -73,6 +73,24 @@ public sealed class PostgresFixture : IAsyncLifetime
         await connection.ExecuteAsync("truncate table leads restart identity");
     }
 
+    public async Task<int> ReadDiscountPercentAsync(string email)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        return await connection.QuerySingleAsync<int>(
+            "select discount_percent from leads where email = lower(@email)", new { email });
+    }
+
+    public async Task InsertWithoutDiscountAsync(string email, string code)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await connection.ExecuteAsync(
+            """
+            insert into leads (email, interest, discount_code, privacy_accepted, marketing_consent)
+            values (lower(@email), 'openmercato', @code, true, true)
+            """,
+            new { email, code });
+    }
+
     /// <summary>The stored row as the database holds it — including the columns Lead does not carry.</summary>
     public async Task<StoredLead> ReadAsync(string email)
     {

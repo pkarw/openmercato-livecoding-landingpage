@@ -15,29 +15,25 @@ permissions:
 
 jobs:
   client:
-    name: Client (typecheck + build)
+    name: Client (typecheck + build + tests)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: client/package-lock.json
-
       - run: npm --prefix client ci
-
       - run: npm --prefix client run typecheck
-
       - run: npm --prefix client run build
+      - run: npm --prefix client test
 
   server:
     name: Server (build + tests)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     # The repository tests run against a real PostgreSQL: the fixture creates a throwaway
     # database per run, applies db/migrations, and drops it again.
     services:
@@ -52,7 +48,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-
     env:
       LANDING_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
 
@@ -62,14 +57,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-
       - name: Restore
         run: |
           bash scripts/dotnet.sh restore server
           bash scripts/dotnet.sh restore tests/Landing.Tests
-
       - name: Build server
         run: bash scripts/dotnet.sh build server --no-restore
-
       - name: Test
         run: bash scripts/dotnet.sh test tests/Landing.Tests --no-restore

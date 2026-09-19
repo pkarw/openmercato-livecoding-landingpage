@@ -1,11 +1,10 @@
 using System.Net;
-using Landing.Configuration;
 using Landing.Models;
 
 namespace Landing.Notifications;
 
 /// <summary>Emails triggered by a claim: the code for the lead, a heads-up for the inbox.</summary>
-public sealed class LeadNotifier(ResendEmailSender sender, EmailSettings settings, OfferSettings offer)
+public sealed class LeadNotifier(ResendEmailSender sender, EmailSettings settings)
 {
     private const string OpenMercatoUrl = "https://openmercatocloud.com/";
     private const string AiTechLeadersUrl = "https://aitechleaders.pl/";
@@ -15,7 +14,7 @@ public sealed class LeadNotifier(ResendEmailSender sender, EmailSettings setting
         var toLead = sender.SendAsync(
             new EmailMessage(
                 To: lead.Email,
-                Subject: $"Your {offer.DiscountPercent}% discount is reserved",
+                Subject: $"Your {lead.DiscountPercent}% discount is reserved",
                 Html: LeadHtml(lead),
                 ReplyTo: settings.LeadsInbox),
             cancellationToken);
@@ -48,7 +47,7 @@ public sealed class LeadNotifier(ResendEmailSender sender, EmailSettings setting
             <div style="font-family:Inter,Arial,sans-serif;background:#141313;color:#fff;padding:32px;border-radius:16px">
               <p>{greeting}</p>
               <p>
-                Thank you — your <strong style="color:#e5f520">{offer.DiscountPercent}% discount</strong> for
+                Thank you — your <strong style="color:#e5f520">{lead.DiscountPercent}% discount</strong> for
                 {Label(lead.Interest)} is reserved.
               </p>
               <p>
@@ -72,6 +71,7 @@ public sealed class LeadNotifier(ResendEmailSender sender, EmailSettings setting
             <tr><td><strong>Email</strong></td><td>{Encode(lead.Email)}</td></tr>
             <tr><td><strong>Name</strong></td><td>{Encode(lead.Name ?? "—")}</td></tr>
             <tr><td><strong>Interested in</strong></td><td>{Label(lead.Interest)}</td></tr>
+            <tr><td><strong>Reserved discount</strong></td><td>{lead.DiscountPercent}%</td></tr>
             <tr><td><strong>Code</strong></td><td>{Encode(lead.DiscountCode)}</td></tr>
             <tr><td><strong>Claimed at</strong></td><td>{lead.CreatedAt:u}</td></tr>
             <tr><td><strong>Consents</strong></td><td>privacy policy + marketing communications</td></tr>

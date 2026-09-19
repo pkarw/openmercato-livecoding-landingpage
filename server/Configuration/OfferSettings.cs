@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Landing.Configuration;
 
 /// <summary>
-/// The limited-time offer: -10% on both products until the end of Sunday 20.09 (Warsaw time).
+/// The limited-time offer: -15% on both products until the end of Sunday 20.09 (Warsaw time).
 /// Both values are overridable so the campaign can be extended without a code change.
 /// </summary>
 public sealed record OfferSettings(int DiscountPercent, DateTimeOffset EndsAt)
@@ -14,7 +14,7 @@ public sealed record OfferSettings(int DiscountPercent, DateTimeOffset EndsAt)
     {
         var percent = int.TryParse(Environment.GetEnvironmentVariable("OFFER_DISCOUNT_PERCENT"), out var parsed)
             ? parsed
-            : 10;
+            : 15;
 
         var endsAtRaw = Environment.GetEnvironmentVariable("OFFER_ENDS_AT") ?? DefaultEndsAt;
         var endsAt = DateTimeOffset.TryParse(endsAtRaw, CultureInfo.InvariantCulture,
