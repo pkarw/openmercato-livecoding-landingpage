@@ -6,6 +6,9 @@ namespace Landing.Data;
 
 public sealed class LeadRepository(NpgsqlDataSource dataSource)
 {
+    private const int DiscountCodeAttempts = 5;
+    private const string DiscountCodeConstraint = "leads_discount_code_key";
+
     private const string Columns =
         "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, created_at as CreatedAt";
 
@@ -28,20 +31,61 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
         string discountCode,
         bool marketingConsent,
         string? source,
+        CancellationToken cancellationToken = default) =>
+        await ClaimAsync(
+            email,
+            name,
+            interest,
+            () => discountCode,
+            marketingConsent,
+            source,
+            cancellationToken);
+
+    /// <summary>
+    /// Reserves the first candidate that is unique across all leads. Callers that can generate
+    /// another candidate should use this overload so a random collision does not fail the claim.
+    /// </summary>
+    public async Task<(Lead Lead, bool AlreadyClaimed)> ClaimAsync(
+        string email,
+        string? name,
+        string interest,
+        Func<string> discountCodeFactory,
+        bool marketingConsent,
+        string? source,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(discountCodeFactory);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        var lead = await connection.QuerySingleOrDefaultAsync<Lead>(
-            $"""
-            insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
-            values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
-            on conflict (email) do nothing
-            returning {Columns}
-            """,
-            new { email, name, interest, discountCode, marketingConsent, source });
+        for (var attempt = 1; attempt <= DiscountCodeAttempts; attempt++)
+        {
+            var discountCode = discountCodeFactory();
+            try
+            {
+                var lead = await connection.QuerySingleOrDefaultAsync<Lead>(
+                    $"""
+                    insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
+                    values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
+                    on conflict (email) do nothing
+                    returning {Columns}
+                    """,
+                    new { email, name, interest, discountCode, marketingConsent, source });
 
-        if (lead is not null) return (lead, false);
+                if (lead is not null) return (lead, false);
+                break;
+            }
+            catch (PostgresException exception) when (
+                exception.SqlState == PostgresErrorCodes.UniqueViolation &&
+                exception.ConstraintName == DiscountCodeConstraint)
+            {
+                if (attempt == DiscountCodeAttempts)
+                {
+                    throw new InvalidOperationException(
+                        $"Could not reserve a unique discount code after {DiscountCodeAttempts} attempts.",
+                        exception);
+                }
+            }
+        }
 
         // Someone already claimed with this address — hand back the code they were given, and
         // record the latest interest so a second visit can widen the selection.
