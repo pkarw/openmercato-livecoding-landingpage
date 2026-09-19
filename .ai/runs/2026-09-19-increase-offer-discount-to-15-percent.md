@@ -47,7 +47,7 @@ Reserve and communicate a stable per-lead discount so new reservations receive 1
 ### Phase 1: Preserve reservation entitlements
 
 - [x] 1.1 Add the discount snapshot migration and disposable PostgreSQL test harness — 47579b5
-- [ ] 1.2 Store and preserve per-lead discount entitlements with integration coverage
+- [x] 1.2 Store and preserve per-lead discount entitlements with integration coverage — 7d9666d
 - [ ] 1.3 Use stored discounts in API and notification output with regression coverage
 - [ ] 1.4 Explain retained discounts in the claimed UI with state coverage
 
