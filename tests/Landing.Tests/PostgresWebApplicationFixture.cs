@@ -4,7 +4,6 @@ using Landing.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
-using Xunit;
 
 namespace Landing.Tests;
 
