@@ -31,6 +31,10 @@ git -C "$fixture_repo" add --update
 git -C "$fixture_repo" commit --quiet -m 'test: remove synthetic secret'
 head_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
 
+# Prove the final files are clean before asking the range scan to find the
+# deleted credential in Git history.
+"$gitleaks_bin" dir --no-banner --redact "$fixture_repo" >/dev/null
+
 set +e
 (
   cd "$fixture_repo"
