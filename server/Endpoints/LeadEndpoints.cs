@@ -85,7 +85,7 @@ public static class LeadEndpoints
             var payload = new
             {
                 lead = new { lead.Email, lead.Name, lead.Interest, lead.CreatedAt },
-                discountPercent = offer.DiscountPercent,
+                discountPercent = lead.DiscountPercent,
                 endsAt = offer.EndsAt,
                 alreadyClaimed,
             };
