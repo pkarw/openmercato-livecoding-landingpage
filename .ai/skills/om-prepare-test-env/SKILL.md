@@ -1,4 +1,4 @@
-# om-prepare-test-env — repo-local notes (-10% landing page)
+# om-prepare-test-env — repo-local notes (-15% landing page)
 
 Generated 2026-09-18. The entrypoint is `.ai/scripts/test-env-up.sh` /
 `.ai/scripts/test-env-down.sh`; run those, do not boot by hand.

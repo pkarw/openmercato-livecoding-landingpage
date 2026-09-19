@@ -13,7 +13,7 @@ import { api, type ClaimResponse, type Offer } from '@/lib/api'
 import { PRIVACY_URL, toInterest, type ProductKey } from '@/lib/offers'
 
 const FALLBACK_OFFER: Offer = {
-  discountPercent: 10,
+  discountPercent: 15,
   endsAt: '2026-09-20T23:59:59+02:00',
   active: true,
   claimed: 0,
