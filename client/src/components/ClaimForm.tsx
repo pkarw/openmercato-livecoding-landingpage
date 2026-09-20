@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label'
 import { api, type ClaimResponse, type Interest } from '@/lib/api'
 import { PRIVACY_URL } from '@/lib/offers'
 
+const MAX_EMAIL_LENGTH = 254
+const MAX_NAME_LENGTH = 200
+
 type Props = {
   interest: Interest | null
   discountPercent: number
@@ -58,6 +61,7 @@ export function ClaimForm({ interest, discountPercent, onClaimed }: Props) {
             id="name"
             name="name"
             autoComplete="name"
+            maxLength={MAX_NAME_LENGTH}
             placeholder="Optional"
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -74,6 +78,7 @@ export function ClaimForm({ interest, discountPercent, onClaimed }: Props) {
             type="email"
             required
             autoComplete="email"
+            maxLength={MAX_EMAIL_LENGTH}
             placeholder="you@company.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
