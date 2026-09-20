@@ -11,7 +11,8 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
     private const string DiscountCodeSavepoint = "discount_code_attempt";
 
     private const string Columns =
-        "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, created_at as CreatedAt";
+        "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, " +
+        "discount_percent as DiscountPercent, created_at as CreatedAt";
 
     private const string SelectByEmailSql = $"select {Columns} from leads where email = lower(@email)";
 
@@ -111,12 +112,16 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
                 {
                     lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
                         $"""
-                        insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
-                        values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
+                        insert into leads (
+                            email, name, interest, discount_code, discount_percent,
+                            privacy_accepted, marketing_consent, source)
+                        values (
+                            lower(@email), @name, @interest, @discountCode, @discountPercent,
+                            true, @marketingConsent, @source)
                         on conflict (email) do nothing
                         returning {Columns}
                         """,
-                        new { email, name, interest, discountCode, marketingConsent, source },
+                        new { email, name, interest, discountCode, discountPercent, marketingConsent, source },
                         cancellationToken,
                         transaction));
                 }
@@ -175,7 +180,7 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
                     leadName = lead.Name,
                     leadInterest = lead.Interest,
                     leadDiscountCode = lead.DiscountCode,
-                    discountPercent,
+                    discountPercent = lead.DiscountPercent,
                     leadCreatedAt = lead.CreatedAt,
                     leadsInbox,
                 },

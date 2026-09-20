@@ -10,6 +10,7 @@ public sealed record Lead(
     string? Name,
     string Interest,
     string DiscountCode,
+    int DiscountPercent,
     DateTime CreatedAt);
 
 /// <summary>What the landing page posts when someone claims the discount.</summary>

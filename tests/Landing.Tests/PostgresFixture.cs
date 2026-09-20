@@ -78,10 +78,29 @@ public sealed class PostgresFixture : IAsyncLifetime
         return (await connection.QueryAsync<StoredDelivery>(
             """
             select id as Id, lead_id as LeadId, kind as Kind, status as Status,
-                   lead_email as LeadEmail, interest as Interest, attempt_count as AttemptCount
+                   lead_email as LeadEmail, interest as Interest,
+                   discount_percent as DiscountPercent, attempt_count as AttemptCount
               from lead_notification_deliveries
              order by id
             """)).AsList();
+    }
+
+    public async Task<int> ReadDiscountPercentAsync(string email)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        return await connection.QuerySingleAsync<int>(
+            "select discount_percent from leads where email = lower(@email)", new { email });
+    }
+
+    public async Task InsertWithoutDiscountAsync(string email, string code)
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        await connection.ExecuteAsync(
+            """
+            insert into leads (email, interest, discount_code, privacy_accepted, marketing_consent)
+            values (lower(@email), 'openmercato', @code, true, true)
+            """,
+            new { email, code });
     }
 
     /// <summary>The stored row as the database holds it — including the columns Lead does not carry.</summary>
@@ -125,6 +144,7 @@ public sealed record StoredDelivery(
     string Status,
     string LeadEmail,
     string Interest,
+    int DiscountPercent,
     int AttemptCount);
 
 public sealed record StoredLead(

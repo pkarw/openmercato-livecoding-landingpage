@@ -6,7 +6,7 @@
 
 # openmercato-livecoding-landingpage
 
-**A one-page lead magnet for the −10% offer on [openmercatocloud.com](https://openmercatocloud.com/) and the
+**A one-page lead magnet for the −15% offer on [openmercatocloud.com](https://openmercatocloud.com/) and the
 [aitechleaders.pl](https://aitechleaders.pl/) training — live until the end of Sunday, 20.09.**
 
 ASP.NET Core (API + pages) · PostgreSQL with migrations · React + shadcn/ui · everything on port **3000**
@@ -73,6 +73,7 @@ bash scripts/serve.sh db new add_utm      # scaffold db/migrations/<timestamp>_a
 | `002_leads.sql` | `leads` — email, interest, consents, reserved code, source |
 | `003_drop_task_board.sql` | drops the old `tasks` table |
 | `004_lead_notification_deliveries.sql` | durable, independently retried lead and inbox email deliveries |
+| `004_leads_discount_percent.sql` | snapshots each reservation's promised percentage (existing rows default to 10%) |
 | `20260919111000_unique_discount_codes.sql` | rejects ambiguous legacy codes, then enforces one lead per code |
 
 The discount-code uniqueness migration deliberately does not rewrite already-issued reservations.
@@ -137,7 +138,7 @@ Both `.env` and `.env.local` are git-ignored — never commit a real `RESEND_API
 | `REDIS_URL` | Redis connection string; leave empty to run without a cache |
 | `CACHE_TTL_SECONDS` | How long the claim counter stays cached (default 30) |
 | `PORT` | Single HTTP port for API + pages (default 3000) |
-| `OFFER_DISCOUNT_PERCENT` | Headline discount (default 10) |
+| `OFFER_DISCOUNT_PERCENT` | Headline discount for new reservations (default 15) |
 | `OFFER_ENDS_AT` | Deadline, ISO 8601 (default `2026-09-20T23:59:59+02:00`) |
 | `RESEND_API_KEY` | Resend API key; unset disables sending without breaking the form |
 | `ADMIN_EMAIL` | From-address, must be on a domain verified in Resend |

@@ -22,6 +22,7 @@ public sealed class DiscountCodeUniquenessTests(PostgresFixture postgres) : IAsy
 
         Assert.False(alreadyClaimed);
         Assert.Equal("OMC10-SECOND", second.DiscountCode);
+        Assert.Equal(10, second.DiscountPercent);
         Assert.Equal("OMC10-SHARED", (await postgres.Leads.FindByEmailAsync("first@example.test"))!.DiscountCode);
         Assert.Equal(2, await postgres.CountAsync());
         Assert.Equal(4, (await postgres.ReadDeliveriesAsync()).Count);
