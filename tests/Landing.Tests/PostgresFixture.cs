@@ -14,13 +14,12 @@ namespace Landing.Tests;
 public sealed class PostgresFixture : IAsyncLifetime
 {
     private const string UrlVariable = "LANDING_TEST_DATABASE_URL";
-
     private string maintenanceConnectionString = string.Empty;
     private string databaseName = string.Empty;
 
     public NpgsqlDataSource DataSource { get; private set; } = null!;
-
     public LeadRepository Leads { get; private set; } = null!;
+    public NotificationDeliveryRepository Deliveries { get; private set; } = null!;
 
     public async Task InitializeAsync()
     {
@@ -51,7 +50,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         DataSource = new NpgsqlDataSourceBuilder(testConnectionString).Build();
         Leads = new LeadRepository(DataSource);
-
+        Deliveries = new NotificationDeliveryRepository(DataSource);
         var migrator = new Migrator(DataSource, MigrationsDirectory(), NullLogger<Migrator>.Instance);
         await migrator.MigrateAsync();
     }
@@ -70,7 +69,19 @@ public sealed class PostgresFixture : IAsyncLifetime
     public async Task ResetAsync()
     {
         await using var connection = await DataSource.OpenConnectionAsync();
-        await connection.ExecuteAsync("truncate table leads restart identity");
+        await connection.ExecuteAsync("truncate table lead_notification_deliveries, leads restart identity");
+    }
+
+    public async Task<IReadOnlyList<StoredDelivery>> ReadDeliveriesAsync()
+    {
+        await using var connection = await DataSource.OpenConnectionAsync();
+        return (await connection.QueryAsync<StoredDelivery>(
+            """
+            select id as Id, lead_id as LeadId, kind as Kind, status as Status,
+                   lead_email as LeadEmail, interest as Interest, attempt_count as AttemptCount
+              from lead_notification_deliveries
+             order by id
+            """)).AsList();
     }
 
     /// <summary>The stored row as the database holds it — including the columns Lead does not carry.</summary>
@@ -106,6 +117,15 @@ public sealed class PostgresFixture : IAsyncLifetime
     private static string MigrationsDirectory() =>
         Path.Combine(DotEnv.FindRepositoryRoot(AppContext.BaseDirectory), "db", "migrations");
 }
+
+public sealed record StoredDelivery(
+    long Id,
+    int LeadId,
+    string Kind,
+    string Status,
+    string LeadEmail,
+    string Interest,
+    int AttemptCount);
 
 public sealed record StoredLead(
     string Email,

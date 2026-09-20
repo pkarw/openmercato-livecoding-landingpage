@@ -47,7 +47,8 @@ public sealed class LeadRepositoryCancellationTests(PostgresFixture postgres) : 
 
         var claim = postgres.Leads.ClaimAsync(
             "cancelled@example.test", "Cancelled", Interests.OpenMercato, "OMC10-AAAAAA",
-            marketingConsent: true, source: "test", cts.Token);
+            discountPercent: 10, leadsInbox: "sales@example.test", marketingConsent: true,
+            source: "test", cancellationToken: cts.Token);
         await WaitUntilBlockedAsync(claim);
         cts.Cancel();
 
@@ -89,7 +90,8 @@ public sealed class LeadRepositoryCancellationTests(PostgresFixture postgres) : 
     {
         var (first, alreadyClaimed) = await postgres.Leads.ClaimAsync(
             "steady@example.test", "Steady", Interests.AiTechLeaders, "ATL10-BBBBBB",
-            marketingConsent: true, source: "test", CancellationToken.None);
+            discountPercent: 10, leadsInbox: "sales@example.test", marketingConsent: true,
+            source: "test", cancellationToken: CancellationToken.None);
 
         Assert.False(alreadyClaimed);
         Assert.Equal("steady@example.test", first.Email);
@@ -97,7 +99,8 @@ public sealed class LeadRepositoryCancellationTests(PostgresFixture postgres) : 
 
         var (repeat, repeatAlreadyClaimed) = await postgres.Leads.ClaimAsync(
             "steady@example.test", "Steady", Interests.AiTechLeaders, "ATL10-CCCCCC",
-            marketingConsent: true, source: "test", CancellationToken.None);
+            discountPercent: 10, leadsInbox: "sales@example.test", marketingConsent: true,
+            source: "test", cancellationToken: CancellationToken.None);
 
         Assert.True(repeatAlreadyClaimed);
         Assert.Equal(first.Id, repeat.Id);

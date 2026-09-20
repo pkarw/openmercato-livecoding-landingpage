@@ -42,7 +42,7 @@ public static class LeadEndpoints
             OfferSettings offer,
             LeadRepository leads,
             CacheStore cache,
-            LeadNotifier notifier,
+            EmailSettings emailSettings,
             ILogger<Lead> logger,
             CancellationToken ct) =>
         {
@@ -76,13 +76,17 @@ public static class LeadEndpoints
                 request.Name,
                 request.Interest!,
                 () => DiscountCodes.Generate(request.Interest!, offer.DiscountPercent),
+                offer.DiscountPercent,
+                emailSettings.LeadsInbox,
                 request.MarketingConsent,
                 request.Source,
                 ct);
 
             await cache.DropAsync(CacheStore.LeadCountKey);
-            await notifier.NotifyAsync(lead, alreadyClaimed, ct);
-            logger.LogInformation("Lead {Status} for {Interest}", alreadyClaimed ? "returning" : "captured", lead.Interest);
+            logger.LogInformation(
+                "Lead {Status} for {Interest}; email notifications are queued",
+                alreadyClaimed ? "returning" : "captured",
+                lead.Interest);
 
             // Keep the legacy fields as a compatibility bridge, but populate them only from this
             // request. Returning persisted values or the real duplicate state would let anyone

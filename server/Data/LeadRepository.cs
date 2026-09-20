@@ -8,6 +8,7 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
 {
     private const int DiscountCodeAttempts = 5;
     private const string DiscountCodeConstraint = "leads_discount_code_key";
+    private const string DiscountCodeSavepoint = "discount_code_attempt";
 
     private const string Columns =
         "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, created_at as CreatedAt";
@@ -26,8 +27,17 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
     /// leaves a query running on the server after the caller has gone. Every statement below goes
     /// through this instead, so the request's token reaches the command itself.
     /// </summary>
-    private static CommandDefinition Command(string sql, object? parameters, CancellationToken cancellationToken) =>
-        new(sql, parameters, commandTimeout: CommandTimeoutSeconds, cancellationToken: cancellationToken);
+    private static CommandDefinition Command(
+        string sql,
+        object? parameters,
+        CancellationToken cancellationToken,
+        NpgsqlTransaction? transaction = null) =>
+        new(
+            sql,
+            parameters,
+            transaction: transaction,
+            commandTimeout: CommandTimeoutSeconds,
+            cancellationToken: cancellationToken);
 
     public async Task<Lead?> FindByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
@@ -53,6 +63,8 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
         string? name,
         string interest,
         string discountCode,
+        int discountPercent,
+        string leadsInbox,
         bool marketingConsent,
         string? source,
         CancellationToken cancellationToken = default) =>
@@ -61,6 +73,8 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
             name,
             interest,
             () => discountCode,
+            discountPercent,
+            leadsInbox,
             marketingConsent,
             source,
             cancellationToken);
@@ -74,23 +88,28 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
         string? name,
         string interest,
         Func<string> discountCodeFactory,
+        int discountPercent,
+        string leadsInbox,
         bool marketingConsent,
         string? source,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(discountCodeFactory);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         // Two attempts only matter in the race where the existing row is deleted between the
         // insert and the read; the second pass then reserves the address outright.
         for (var rowAttempt = 0; rowAttempt < 2; rowAttempt++)
         {
+            Lead? lead = null;
             for (var codeAttempt = 1; codeAttempt <= DiscountCodeAttempts; codeAttempt++)
             {
                 var discountCode = discountCodeFactory();
+                await transaction.SaveAsync(DiscountCodeSavepoint, cancellationToken);
                 try
                 {
-                    var lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
+                    lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
                         $"""
                         insert into leads (email, name, interest, discount_code, privacy_accepted, marketing_consent, source)
                         values (lower(@email), @name, @interest, @discountCode, true, @marketingConsent, @source)
@@ -98,29 +117,73 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
                         returning {Columns}
                         """,
                         new { email, name, interest, discountCode, marketingConsent, source },
-                        cancellationToken));
-
-                    if (lead is not null) return (lead, false);
-                    break;
+                        cancellationToken,
+                        transaction));
                 }
                 catch (PostgresException exception) when (
                     exception.SqlState == PostgresErrorCodes.UniqueViolation &&
                     exception.ConstraintName == DiscountCodeConstraint)
                 {
+                    await transaction.RollbackAsync(DiscountCodeSavepoint, cancellationToken);
+                    await transaction.ReleaseAsync(DiscountCodeSavepoint, cancellationToken);
                     if (codeAttempt == DiscountCodeAttempts)
                     {
                         throw new InvalidOperationException(
                             $"Could not reserve a unique discount code after {DiscountCodeAttempts} attempts.",
                             exception);
                     }
+
+                    continue;
                 }
+
+                await transaction.ReleaseAsync(DiscountCodeSavepoint, cancellationToken);
+                break;
             }
 
-            var existing = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
-                SelectByEmailSql,
-                new { email },
-                cancellationToken));
-            if (existing is not null) return (existing, true);
+            var alreadyClaimed = lead is null;
+
+            if (lead is null)
+            {
+                lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
+                    SelectByEmailSql,
+                    new { email },
+                    cancellationToken,
+                    transaction));
+            }
+
+            if (lead is null) continue;
+
+            // The reservation and both independent delivery intents commit together. A duplicate
+            // claim can recover a pre-outbox reservation, while the unique key keeps concurrent
+            // submissions from creating duplicate work or replacing an existing payload snapshot.
+            await connection.ExecuteAsync(Command(
+                """
+                insert into lead_notification_deliveries (
+                  lead_id, kind, lead_email, lead_name, interest, discount_code,
+                  discount_percent, lead_created_at, leads_inbox)
+                values
+                  (@leadId, 'lead', @leadEmail, @leadName, @leadInterest, @leadDiscountCode,
+                   @discountPercent, @leadCreatedAt, @leadsInbox),
+                  (@leadId, 'inbox', @leadEmail, @leadName, @leadInterest, @leadDiscountCode,
+                   @discountPercent, @leadCreatedAt, @leadsInbox)
+                on conflict (lead_id, kind) do nothing
+                """,
+                new
+                {
+                    leadId = lead.Id,
+                    leadEmail = lead.Email,
+                    leadName = lead.Name,
+                    leadInterest = lead.Interest,
+                    leadDiscountCode = lead.DiscountCode,
+                    discountPercent,
+                    leadCreatedAt = lead.CreatedAt,
+                    leadsInbox,
+                },
+                cancellationToken,
+                transaction));
+
+            await transaction.CommitAsync(cancellationToken);
+            return (lead, alreadyClaimed);
         }
 
         throw new InvalidOperationException(

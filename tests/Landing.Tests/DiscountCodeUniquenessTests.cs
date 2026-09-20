@@ -24,6 +24,7 @@ public sealed class DiscountCodeUniquenessTests(PostgresFixture postgres) : IAsy
         Assert.Equal("OMC10-SECOND", second.DiscountCode);
         Assert.Equal("OMC10-SHARED", (await postgres.Leads.FindByEmailAsync("first@example.test"))!.DiscountCode);
         Assert.Equal(2, await postgres.CountAsync());
+        Assert.Equal(4, (await postgres.ReadDeliveriesAsync()).Count);
     }
 
     [Fact]
@@ -37,6 +38,7 @@ public sealed class DiscountCodeUniquenessTests(PostgresFixture postgres) : IAsy
         Assert.Contains("after 5 attempts", error.Message);
         Assert.Equal(1, await postgres.CountAsync());
         Assert.Null(await postgres.Leads.FindByEmailAsync("second@example.test"));
+        Assert.Equal(2, (await postgres.ReadDeliveriesAsync()).Count);
     }
 
     [Fact]
@@ -50,6 +52,7 @@ public sealed class DiscountCodeUniquenessTests(PostgresFixture postgres) : IAsy
         Assert.Equal(first.Id, repeat.Id);
         Assert.Equal("OMC10-FIRST", repeat.DiscountCode);
         Assert.Equal(1, await postgres.CountAsync());
+        Assert.Equal(2, (await postgres.ReadDeliveriesAsync()).Count);
     }
 
     [Fact]
@@ -71,6 +74,7 @@ public sealed class DiscountCodeUniquenessTests(PostgresFixture postgres) : IAsy
         Assert.Equal(8, results.Select(result => result.Lead.DiscountCode).Distinct().Count());
         Assert.Single(results, result => result.Lead.DiscountCode == "OMC10-SHARED");
         Assert.Equal(8, await postgres.CountAsync());
+        Assert.Equal(16, (await postgres.ReadDeliveriesAsync()).Count);
     }
 
     [Fact]
@@ -107,6 +111,8 @@ public sealed class DiscountCodeUniquenessTests(PostgresFixture postgres) : IAsy
             name: "Lead",
             interest: Interests.OpenMercato,
             discountCodeFactory: codeFactory,
+            discountPercent: 10,
+            leadsInbox: "sales@example.test",
             marketingConsent: true,
             source: "test");
 }

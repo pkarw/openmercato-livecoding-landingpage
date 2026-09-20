@@ -141,5 +141,13 @@ public sealed class LeadRepositoryClaimTests(PostgresFixture postgres) : IAsyncL
         string? name = null,
         bool marketingConsent = true,
         string? source = null) =>
-        postgres.Leads.ClaimAsync(email, name, interest, code, marketingConsent, source);
+        postgres.Leads.ClaimAsync(
+            email,
+            name,
+            interest,
+            code,
+            discountPercent: 10,
+            leadsInbox: "sales@example.test",
+            marketingConsent,
+            source);
 }
