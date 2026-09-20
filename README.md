@@ -74,6 +74,13 @@ bash scripts/serve.sh db new add_utm      # scaffold db/migrations/<timestamp>_a
 | `003_drop_task_board.sql` | drops the old `tasks` table |
 | `004_lead_notification_deliveries.sql` | durable, independently retried lead and inbox email deliveries |
 | `004_leads_discount_percent.sql` | snapshots each reservation's promised percentage (existing rows default to 10%) |
+| `20260919111000_unique_discount_codes.sql` | rejects ambiguous legacy codes, then enforces one lead per code |
+
+The discount-code uniqueness migration deliberately does not rewrite already-issued reservations.
+If it finds a duplicate, it rolls back with a query that identifies every affected email so an operator
+can reconcile those reservations with the customers before rerunning migrations. Rolling the schema
+change back with `alter table leads drop constraint leads_discount_code_key` preserves every stored code,
+but removes collision protection for future claims; deploy the previous application version at the same time.
 
 ## API
 

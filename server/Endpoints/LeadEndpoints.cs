@@ -71,13 +71,11 @@ public static class LeadEndpoints
                 return Results.BadRequest(new { error = "The discount code is delivered by email, so marketing consent is required." });
             }
 
-            var code = DiscountCodes.Generate(request.Interest!, offer.DiscountPercent);
-
             var (lead, alreadyClaimed) = await leads.ClaimAsync(
                 email,
                 request.Name,
                 request.Interest!,
-                code,
+                () => DiscountCodes.Generate(request.Interest!, offer.DiscountPercent),
                 offer.DiscountPercent,
                 emailSettings.LeadsInbox,
                 request.MarketingConsent,

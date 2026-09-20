@@ -6,6 +6,10 @@ namespace Landing.Data;
 
 public sealed class LeadRepository(NpgsqlDataSource dataSource)
 {
+    private const int DiscountCodeAttempts = 5;
+    private const string DiscountCodeConstraint = "leads_discount_code_key";
+    private const string DiscountCodeSavepoint = "discount_code_attempt";
+
     private const string Columns =
         "id as Id, email as Email, name as Name, interest as Interest, discount_code as DiscountCode, " +
         "discount_percent as DiscountPercent, created_at as CreatedAt";
@@ -64,29 +68,82 @@ public sealed class LeadRepository(NpgsqlDataSource dataSource)
         string leadsInbox,
         bool marketingConsent,
         string? source,
+        CancellationToken cancellationToken = default) =>
+        await ClaimAsync(
+            email,
+            name,
+            interest,
+            () => discountCode,
+            discountPercent,
+            leadsInbox,
+            marketingConsent,
+            source,
+            cancellationToken);
+
+    /// <summary>
+    /// Reserves the first candidate that is unique across all leads. Callers that can generate
+    /// another candidate should use this overload so a random collision does not fail the claim.
+    /// </summary>
+    public async Task<(Lead Lead, bool AlreadyClaimed)> ClaimAsync(
+        string email,
+        string? name,
+        string interest,
+        Func<string> discountCodeFactory,
+        int discountPercent,
+        string leadsInbox,
+        bool marketingConsent,
+        string? source,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(discountCodeFactory);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         // Two attempts only matter in the race where the existing row is deleted between the
         // insert and the read; the second pass then reserves the address outright.
-        for (var attempt = 0; attempt < 2; attempt++)
+        for (var rowAttempt = 0; rowAttempt < 2; rowAttempt++)
         {
-            var lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
-                $"""
-                insert into leads (
-                    email, name, interest, discount_code, discount_percent,
-                    privacy_accepted, marketing_consent, source)
-                values (
-                    lower(@email), @name, @interest, @discountCode, @discountPercent,
-                    true, @marketingConsent, @source)
-                on conflict (email) do nothing
-                returning {Columns}
-                """,
-                new { email, name, interest, discountCode, discountPercent, marketingConsent, source },
-                cancellationToken,
-                transaction));
+            Lead? lead = null;
+            for (var codeAttempt = 1; codeAttempt <= DiscountCodeAttempts; codeAttempt++)
+            {
+                var discountCode = discountCodeFactory();
+                await transaction.SaveAsync(DiscountCodeSavepoint, cancellationToken);
+                try
+                {
+                    lead = await connection.QuerySingleOrDefaultAsync<Lead>(Command(
+                        $"""
+                        insert into leads (
+                            email, name, interest, discount_code, discount_percent,
+                            privacy_accepted, marketing_consent, source)
+                        values (
+                            lower(@email), @name, @interest, @discountCode, @discountPercent,
+                            true, @marketingConsent, @source)
+                        on conflict (email) do nothing
+                        returning {Columns}
+                        """,
+                        new { email, name, interest, discountCode, discountPercent, marketingConsent, source },
+                        cancellationToken,
+                        transaction));
+                }
+                catch (PostgresException exception) when (
+                    exception.SqlState == PostgresErrorCodes.UniqueViolation &&
+                    exception.ConstraintName == DiscountCodeConstraint)
+                {
+                    await transaction.RollbackAsync(DiscountCodeSavepoint, cancellationToken);
+                    await transaction.ReleaseAsync(DiscountCodeSavepoint, cancellationToken);
+                    if (codeAttempt == DiscountCodeAttempts)
+                    {
+                        throw new InvalidOperationException(
+                            $"Could not reserve a unique discount code after {DiscountCodeAttempts} attempts.",
+                            exception);
+                    }
+
+                    continue;
+                }
+
+                await transaction.ReleaseAsync(DiscountCodeSavepoint, cancellationToken);
+                break;
+            }
 
             var alreadyClaimed = lead is null;
 
