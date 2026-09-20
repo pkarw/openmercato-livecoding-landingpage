@@ -8,8 +8,8 @@ Reserve and communicate a stable per-lead discount so new reservations receive 1
 
 ## Scope
 
-- Add a permanent `discount_percent` snapshot to `leads` and carry it through repository reads, claim responses, and both notification paths.
-- Explain retained discounts in the claimed UI and align repository-owned offer defaults, metadata, test configuration, and documentation to 15%.
+- Add a permanent `discount_percent` snapshot to `leads` and carry it through repository reads, durable notification payloads, and both email paths.
+- Keep the anonymous claim response privacy-safe while aligning repository-owned offer defaults, metadata, test configuration, and documentation to 15%.
 - Add integration coverage using a disposable PostgreSQL database, including existing-lead, new-lead, duplicate, and database-default cases.
 - Preserve the current campaign deadline. This implementation follows Q1 option 2 from the source spec: ship the requested 15% behavior without extending the commercial window. Production environment activation and deployment are operator-owned.
 
@@ -17,7 +17,7 @@ Reserve and communicate a stable per-lead discount so new reservations receive 1
 
 - Changing `OFFER_ENDS_AT`, product eligibility, or the one-reservation-per-email rule.
 - Retroactively upgrading existing reservations or removing the permanent 10% database default.
-- Merging or duplicating the full security scope of PR #14. Until that dependency lands, the current conflict path must at least leave the stored code and percentage untouched; any later conflict resolution must preserve that invariant.
+- Weakening the anonymous-response privacy contract from PR #14; stored entitlement details remain mailbox-only.
 - Sending real email or reading/modifying production lead data during tests.
 
 ## Implementation Plan
@@ -26,8 +26,8 @@ Reserve and communicate a stable per-lead discount so new reservations receive 1
 
 1. Add the additive `discount_percent` migration and the disposable PostgreSQL test harness needed to verify migration/backfill behavior.
 2. Extend the lead model and repository so new claims store the active percentage while repeat and concurrent claims return the stored entitlement unchanged; add integration regression coverage.
-3. Make the API and notification content use the stored percentage, including fulfillment visibility; add response and rendered-email coverage without sending email.
-4. Add claimed-state copy that explains a retained lower percentage and cover both the lower-than-live and matching-offer states.
+3. Snapshot the stored percentage into the durable notification outbox and use it for customer and fulfillment email content; add rendered-message coverage without sending email.
+4. Preserve the privacy-safe generic claimed state so anonymous callers cannot discover a stored entitlement.
 
 ### Phase 2: Activate and verify 15%
 
@@ -37,7 +37,7 @@ Reserve and communicate a stable per-lead discount so new reservations receive 1
 ## Risks
 
 - This is a money- and schema-affecting change, so it requires `risk-high`, independent review, negative-path integration coverage, and UI QA.
-- PR #14 is still open and changes the same duplicate-claim branch. This branch preserves the discount entitlement on current `main`; if #14 lands first, reconcile its read-only conflict path without restoring the old update behavior.
+- Current `main` includes the anonymous-claim privacy and durable notification-outbox changes. Conflict resolution must preserve both while snapshotting the stored entitlement into queued deliveries.
 - The existing deadline remains unchanged and is close. Repository readiness does not prove the production environment has been set to 15% or deployed before the offer closes.
 
 ## Progress

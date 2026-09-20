@@ -34,6 +34,7 @@ public sealed class LeadDiscountTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(10, lead.DiscountPercent);
         Assert.Equal("OMC10-AAAAAA", lead.DiscountCode);
         Assert.Equal(10, await postgres.ReadDiscountPercentAsync(Email));
+        Assert.All(await postgres.ReadDeliveriesAsync(), delivery => Assert.Equal(10, delivery.DiscountPercent));
     }
 
     [Fact]
@@ -90,6 +91,7 @@ public sealed class LeadDiscountTests(PostgresFixture postgres) : IAsyncLifetime
             interest: Interests.OpenMercato,
             discountCode: code,
             discountPercent,
+            leadsInbox: "sales@example.test",
             marketingConsent: true,
             source: "test");
 }

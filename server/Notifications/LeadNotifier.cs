@@ -4,39 +4,33 @@ using Landing.Models;
 namespace Landing.Notifications;
 
 /// <summary>Emails triggered by a claim: the code for the lead, a heads-up for the inbox.</summary>
-public sealed class LeadNotifier(ResendEmailSender sender, EmailSettings settings)
+public sealed class LeadNotifier
 {
     private const string OpenMercatoUrl = "https://openmercatocloud.com/";
     private const string AiTechLeadersUrl = "https://aitechleaders.pl/";
 
-    public async Task NotifyAsync(Lead lead, bool alreadyClaimed, CancellationToken cancellationToken = default)
+    public EmailMessage CreateMessage(NotificationDelivery delivery)
     {
-        var toLead = sender.SendAsync(
-            new EmailMessage(
-                To: lead.Email,
-                Subject: $"Your {lead.DiscountPercent}% discount is reserved",
-                Html: LeadHtml(lead),
-                ReplyTo: settings.LeadsInbox),
-            cancellationToken);
-
-        // A repeat claim keeps the original code, so the inbox already heard about this address.
-        var toInbox = alreadyClaimed
-            ? Task.FromResult(false)
-            : sender.SendAsync(
-                new EmailMessage(
-                    To: settings.LeadsInbox,
-                    Subject: $"New lead: {lead.Email} — {Label(lead.Interest)}",
-                    Html: InboxHtml(lead),
-                    ReplyTo: lead.Email),
-                cancellationToken);
-
-        await Task.WhenAll(toLead, toInbox);
+        return delivery.Kind switch
+        {
+            NotificationKinds.Lead => new EmailMessage(
+                To: delivery.LeadEmail,
+                Subject: $"Your {delivery.DiscountPercent}% discount is reserved",
+                Html: LeadHtml(delivery),
+                ReplyTo: delivery.LeadsInbox),
+            NotificationKinds.Inbox => new EmailMessage(
+                To: delivery.LeadsInbox,
+                Subject: $"New lead: {delivery.LeadEmail} — {Label(delivery.Interest)}",
+                Html: InboxHtml(delivery),
+                ReplyTo: delivery.LeadEmail),
+            _ => throw new InvalidOperationException($"Unknown notification kind '{delivery.Kind}'."),
+        };
     }
 
-    private string LeadHtml(Lead lead)
+    private static string LeadHtml(NotificationDelivery delivery)
     {
-        var greeting = string.IsNullOrWhiteSpace(lead.Name) ? "Hi," : $"Hi {Encode(lead.Name)},";
-        var links = lead.Interest switch
+        var greeting = string.IsNullOrWhiteSpace(delivery.LeadName) ? "Hi," : $"Hi {Encode(delivery.LeadName)},";
+        var links = delivery.Interest switch
         {
             Interests.OpenMercato => $"<a href=\"{OpenMercatoUrl}\">openmercatocloud.com</a>",
             Interests.AiTechLeaders => $"<a href=\"{AiTechLeadersUrl}\">aitechleaders.pl</a>",
@@ -47,8 +41,8 @@ public sealed class LeadNotifier(ResendEmailSender sender, EmailSettings setting
             <div style="font-family:Inter,Arial,sans-serif;background:#141313;color:#fff;padding:32px;border-radius:16px">
               <p>{greeting}</p>
               <p>
-                Thank you — your <strong style="color:#e5f520">{lead.DiscountPercent}% discount</strong> for
-                {Label(lead.Interest)} is reserved.
+                Thank you — your <strong style="color:#e5f520">{delivery.DiscountPercent}% discount</strong> for
+                {Label(delivery.Interest)} is reserved.
               </p>
               <p>
                 We will email you the personal discount code shortly. Redeem it when you sign up on {links} —
@@ -63,17 +57,17 @@ public sealed class LeadNotifier(ResendEmailSender sender, EmailSettings setting
             """;
     }
 
-    private string InboxHtml(Lead lead) =>
+    private static string InboxHtml(NotificationDelivery delivery) =>
         $"""
         <div style="font-family:Inter,Arial,sans-serif">
           <h2>New discount lead</h2>
           <table cellpadding="6" style="border-collapse:collapse">
-            <tr><td><strong>Email</strong></td><td>{Encode(lead.Email)}</td></tr>
-            <tr><td><strong>Name</strong></td><td>{Encode(lead.Name ?? "—")}</td></tr>
-            <tr><td><strong>Interested in</strong></td><td>{Label(lead.Interest)}</td></tr>
-            <tr><td><strong>Reserved discount</strong></td><td>{lead.DiscountPercent}%</td></tr>
-            <tr><td><strong>Code</strong></td><td>{Encode(lead.DiscountCode)}</td></tr>
-            <tr><td><strong>Claimed at</strong></td><td>{lead.CreatedAt:u}</td></tr>
+            <tr><td><strong>Email</strong></td><td>{Encode(delivery.LeadEmail)}</td></tr>
+            <tr><td><strong>Name</strong></td><td>{Encode(delivery.LeadName ?? "—")}</td></tr>
+            <tr><td><strong>Interested in</strong></td><td>{Label(delivery.Interest)}</td></tr>
+            <tr><td><strong>Reserved discount</strong></td><td>{delivery.DiscountPercent}%</td></tr>
+            <tr><td><strong>Code</strong></td><td>{Encode(delivery.DiscountCode)}</td></tr>
+            <tr><td><strong>Claimed at</strong></td><td>{delivery.LeadCreatedAt:u}</td></tr>
             <tr><td><strong>Consents</strong></td><td>privacy policy + marketing communications</td></tr>
           </table>
         </div>
