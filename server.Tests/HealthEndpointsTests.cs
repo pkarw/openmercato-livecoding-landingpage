@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Landing.Endpoints;
+using Landing.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -76,6 +77,35 @@ public sealed class HealthEndpointsTests
         var json = SerializeValue(result);
         Assert.Contains("\"error\":\"disabled\"", json);
         Assert.DoesNotContain("REDIS_URL", json);
+    }
+
+    [Fact]
+    public async Task NotificationFailureIsReportedWithoutLeakingDiagnostics()
+    {
+        var logger = new RecordingLogger();
+
+        var result = await HealthEndpoints.CheckHealthWithNotificationsAsync(
+            () => Task.CompletedTask,
+            redisEnabled: true,
+            () => Task.CompletedTask,
+            _ => Task.FromException<NotificationDeliveryStatus>(
+                new InvalidOperationException(SensitiveMessage)),
+            emailConfigured: true,
+            logger,
+            correlationId: "health-trace-notifications");
+
+        Assert.Equal(StatusCodes.Status200OK, GetStatusCode(result));
+
+        var json = SerializeValue(result);
+        Assert.Contains("\"status\":\"degraded\"", json);
+        Assert.Contains("\"notifications\":", json);
+        Assert.Contains("\"status\":\"unavailable\"", json);
+        Assert.DoesNotContain(SensitiveMessage, json);
+        Assert.DoesNotContain("synthetic-secret", json);
+
+        var log = Assert.Single(logger.Messages);
+        Assert.Contains("health-trace-notifications", log);
+        Assert.DoesNotContain(SensitiveMessage, log);
     }
 
     private static int? GetStatusCode(IResult result) =>

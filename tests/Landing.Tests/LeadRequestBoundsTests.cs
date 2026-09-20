@@ -50,7 +50,7 @@ public sealed class LeadRequestBoundsTests
         builder.Services.AddSingleton<OfferSettings>(_ => null!);
         builder.Services.AddSingleton<LeadRepository>(_ => null!);
         builder.Services.AddSingleton<CacheStore>(_ => null!);
-        builder.Services.AddSingleton<LeadNotifier>(_ => null!);
+        builder.Services.AddSingleton<EmailSettings>(_ => null!);
         await using var app = builder.Build();
         app.MapLeadEndpoints();
 
