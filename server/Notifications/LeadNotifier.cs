@@ -65,6 +65,7 @@ public sealed class LeadNotifier
             <tr><td><strong>Email</strong></td><td>{Encode(delivery.LeadEmail)}</td></tr>
             <tr><td><strong>Name</strong></td><td>{Encode(delivery.LeadName ?? "—")}</td></tr>
             <tr><td><strong>Interested in</strong></td><td>{Label(delivery.Interest)}</td></tr>
+            <tr><td><strong>Reserved discount</strong></td><td>{delivery.DiscountPercent}%</td></tr>
             <tr><td><strong>Code</strong></td><td>{Encode(delivery.DiscountCode)}</td></tr>
             <tr><td><strong>Claimed at</strong></td><td>{delivery.LeadCreatedAt:u}</td></tr>
             <tr><td><strong>Consents</strong></td><td>privacy policy + marketing communications</td></tr>
